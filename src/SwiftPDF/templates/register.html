@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Register | SwiftPDF</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <main class="auth-shell">
+        <section class="auth-card">
+            <div class="auth-brand">
+                <img src="{{ url_for('static', filename='logo.svg') }}" alt="SwiftPDF" class="logo">
+                <span>SwiftPDF</span>
+            </div>
+
+            <div class="auth-heading">
+                <h1>Create account</h1>
+                <p>Register to access the PDF tools dashboard.</p>
+            </div>
+
+            {% if error %}
+            <div class="alert" role="alert">{{ error }}</div>
+            {% endif %}
+
+            <form class="auth-form" action="{{ url_for('register') }}" method="post">
+                <div class="field-row">
+                    <label class="field">
+                        <span>First name</span>
+                        <input type="text" name="first_name" value="{{ first_name or '' }}" autocomplete="given-name" required autofocus>
+                    </label>
+
+                    <label class="field">
+                        <span>Last name</span>
+                        <input type="text" name="last_name" value="{{ last_name or '' }}" autocomplete="family-name" required>
+                    </label>
+                </div>
+
+                <label class="field">
+                    <span>Email</span>
+                    <input type="email" name="email" value="{{ email or '' }}" autocomplete="email" required>
+                </label>
+
+                <label class="field">
+                    <span>Password</span>
+                    <input type="password" name="password" autocomplete="new-password" required>
+                </label>
+
+                <label class="field">
+                    <span>Confirm password</span>
+                    <input type="password" name="confirm_password" autocomplete="new-password" required>
+                </label>
+
+                <button class="primary-action" type="submit">Register</button>
+            </form>
+
+            <p class="auth-switch">Already have an account? <a href="{{ url_for('login') }}">Login</a></p>
+        </section>
+    </main>
+</body>
+</html>

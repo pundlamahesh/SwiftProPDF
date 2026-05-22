@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "swiftpdf"
+version = "0.1.0"
+description = "SwiftPDF - Fast and secure PDF tools including unlock, split, and merge capabilities."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "cryptography>=3.1",
+    "Flask>=3.0.0",
+    "pypdf[crypto]>=4.3.0",
+]
+
+[project.scripts]
+swiftpdf = "SwiftPDF.cli:main"
+swiftpdf-ui = "SwiftPDF.web:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+SwiftPDF = [
+    "static/*.js",
+    "static/*.css",
+    "templates/*.html",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

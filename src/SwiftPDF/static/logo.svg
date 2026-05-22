@@ -1,0 +1,12 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="100" height="100" rx="12" fill="#2563eb"/>
+  
+  <!-- Swift arrow symbol -->
+  <g transform="translate(50, 50)">
+    <!-- Left chevron -->
+    <path d="M -15 -10 L -5 0 L -15 10" stroke="white" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Right chevron -->
+    <path d="M -2 -10 L 8 0 L -2 10" stroke="white" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>
