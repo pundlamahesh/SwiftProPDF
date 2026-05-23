@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  swiftpdf:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: swiftpdf
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=production
+      - SWIFTPDF_SECRET_KEY=${SWIFTPDF_SECRET_KEY:-your-secret-key-change-in-production}
+      - MAX_CONTENT_LENGTH=104857600
+      - TEMP_DIR=/tmp/swiftpdf
+      - LOG_LEVEL=INFO
+      - DATABASE_PATH=/app/instance/swiftpdf.sqlite3
+    volumes:
+      - ./instance:/app/instance
+      - /tmp/swiftpdf:/tmp/swiftpdf
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - swiftpdf-network
+
+  # Optional: Nginx reverse proxy for production-like setup
+  nginx:
+    image: nginx:latest
+    container_name: swiftpdf-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - swiftpdf
+    networks:
+      - swiftpdf-network
+    profiles:
+      - production
+
+networks:
+  swiftpdf-network:
+    driver: bridge

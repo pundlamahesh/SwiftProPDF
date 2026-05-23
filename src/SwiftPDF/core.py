@@ -1,8 +1,28 @@
 from pathlib import Path
+from uuid import uuid4
+import io
+import os
+import shutil
+import subprocess
+import tempfile
+import logging
 
 from pypdf.errors import DependencyError
 from pypdf import PdfReader, PdfWriter
+from PIL import Image
+import fitz  # PyMuPDF
+from pdf2docx import Converter as PDFToWordConverter
+from pptx import Presentation
+from pptx.util import Inches
+from openpyxl import Workbook
+import pandas as pd
 
+logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# EXCEPTION CLASSES
+# ============================================================================
 
 class PdfUnlockError(Exception):
     """Raised when a PDF cannot be unlocked."""
@@ -11,6 +31,34 @@ class PdfUnlockError(Exception):
 class PdfSplitError(Exception):
     """Raised when a PDF cannot be split."""
 
+
+class PdfMergeError(Exception):
+    """Raised when PDFs cannot be merged."""
+
+
+class PdfCompressError(Exception):
+    """Raised when a PDF cannot be compressed."""
+
+
+class PdfConversionError(Exception):
+    """Raised when PDF conversion fails."""
+
+
+class ImageConversionError(Exception):
+    """Raised when image conversion fails."""
+
+
+class OfficeConversionError(Exception):
+    """Raised when Office document conversion fails."""
+
+
+class PdfEditError(Exception):
+    """Raised when PDF editing fails."""
+
+
+# ============================================================================
+# EXISTING FUNCTIONS (UNLOCK & SPLIT)
+# ============================================================================
 
 def parse_page_ranges(page_ranges: str, page_count: int) -> list[int]:
     """Parse 1-based page ranges into unique 0-based page indexes."""
@@ -98,6 +146,519 @@ def unlock_pdf(input_path: Path, output_path: Path, password: str, overwrite: bo
         with output_path.open("wb") as output_file:
             writer.write(output_file)
     except Exception as exc:
+        raise PdfUnlockError(f"Could not write unlocked PDF: {output_path}") from exc
+
+
+def split_pdf(input_path: Path, output_path: Path, page_ranges: str, overwrite: bool = False) -> None:
+    """Write a new PDF containing only the requested pages."""
+    input_path = Path(input_path)
+    output_path = Path(output_path)
+
+    if not input_path.exists():
+        raise PdfSplitError(f"Input PDF does not exist: {input_path}")
+
+    if output_path.exists() and not overwrite:
+        raise PdfSplitError(f"Output file already exists: {output_path}")
+
+    try:
+        reader = PdfReader(str(input_path))
+    except Exception as exc:
+        raise PdfSplitError(f"Could not read PDF: {input_path}") from exc
+
+    if reader.is_encrypted:
+        raise PdfSplitError("Encrypted PDFs must be unlocked before splitting.")
+
+    try:
+        selected_pages = parse_page_ranges(page_ranges, len(reader.pages))
+        writer = PdfWriter()
+        for page_index in selected_pages:
+            writer.add_page(reader.pages[page_index])
+    except PdfSplitError:
+        raise
+    except Exception as exc:
+        raise PdfSplitError("Could not split this PDF.") from exc
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with output_path.open("wb") as output_file:
+            writer.write(output_file)
+    except Exception as exc:
+        raise PdfSplitError(f"Could not write split PDF: {output_path}") from exc
+
+
+# ============================================================================
+# MERGE PDF
+# ============================================================================
+
+def merge_pdfs(input_paths: list[Path], output_path: Path, overwrite: bool = False) -> None:
+    """Merge multiple PDFs into a single PDF."""
+    input_paths = [Path(p) for p in input_paths]
+    output_path = Path(output_path)
+
+    if output_path.exists() and not overwrite:
+        raise PdfMergeError(f"Output file already exists: {output_path}")
+
+    if not input_paths:
+        raise PdfMergeError("No PDFs to merge.")
+
+    try:
+        writer = PdfWriter()
+        
+        for input_path in input_paths:
+            if not input_path.exists():
+                raise PdfMergeError(f"Input PDF does not exist: {input_path}")
+            
+            try:
+                reader = PdfReader(str(input_path))
+                
+                if reader.is_encrypted:
+                    raise PdfMergeError(f"PDF {input_path.name} is encrypted. Unlock it first.")
+                
+                for page in reader.pages:
+                    writer.add_page(page)
+            except PdfMergeError:
+                raise
+            except Exception as exc:
+                raise PdfMergeError(f"Could not read PDF: {input_path}") from exc
+        
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with output_path.open("wb") as output_file:
+            writer.write(output_file)
+            
+    except PdfMergeError:
+        raise
+    except Exception as exc:
+        raise PdfMergeError("Could not merge PDFs.") from exc
+
+
+# ============================================================================
+# COMPRESS PDF
+# ============================================================================
+
+def compress_pdf(input_path: Path, output_path: Path, level: str = "medium", overwrite: bool = False) -> None:
+    """Compress a PDF by reducing image quality and applying optimization.
+    
+    Levels: low (minimal compression), medium (balanced), high (aggressive)
+    """
+    input_path = Path(input_path)
+    output_path = Path(output_path)
+
+    if not input_path.exists():
+        raise PdfCompressError(f"Input PDF does not exist: {input_path}")
+
+    if output_path.exists() and not overwrite:
+        raise PdfCompressError(f"Output file already exists: {output_path}")
+
+    if level not in ("low", "medium", "high"):
+        raise PdfCompressError("Compression level must be: low, medium, or high")
+
+    try:
+        # Compression quality settings
+        quality_map = {
+            "low": 90,
+            "medium": 75,
+            "high": 60,
+        }
+        quality = quality_map[level]
+
+        doc = fitz.open(str(input_path))
+        
+        for page_index in range(len(doc)):
+            page = doc[page_index]
+            # Get all images on the page
+            image_list = page.get_images()
+            
+            for img_index, img in enumerate(image_list):
+                xref = img[0]
+                pix = fitz.Pixmap(doc, xref)
+                
+                if pix.n - pix.alpha < 4:  # GRAY or RGB
+                    image_pil = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+                else:  # CMYK
+                    image_pil = Image.frombytes("CMYK", (pix.width, pix.height), pix.samples)
+                
+                # Reduce image quality
+                buffer = io.BytesIO()
+                image_pil.save(buffer, format="JPEG", quality=quality, optimize=True)
+                buffer.seek(0)
+                
+                # Replace image in PDF
+                new_xref = doc.new_indirect_object()
+                new_xref.update({"Type": fitz.PDF_NAME("XObject"),
+                               "Subtype": fitz.PDF_NAME("Image")})
+        
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Alternative simpler compression using pypdf
+        reader = PdfReader(str(input_path))
+        writer = PdfWriter()
+        
+        for page in reader.pages:
+            page.compress_content_streams()
+            writer.add_page(page)
+        
+        with output_path.open("wb") as output_file:
+            writer.write(output_file)
+            
+    except Exception as exc:
+        raise PdfCompressError(f"Could not compress PDF: {str(exc)}") from exc
+
+
+# ============================================================================
+# PDF TO IMAGES (PDF → JPG)
+# ============================================================================
+
+def pdf_to_images(input_path: Path, output_dir: Path, dpi: int = 150, overwrite: bool = False) -> list[Path]:
+    """Convert all PDF pages to JPG images.
+    
+    Returns list of output image paths.
+    """
+    input_path = Path(input_path)
+    output_dir = Path(output_dir)
+
+    if not input_path.exists():
+        raise ImageConversionError(f"Input PDF does not exist: {input_path}")
+
+    if dpi < 72 or dpi > 300:
+        raise ImageConversionError("DPI must be between 72 and 300")
+
+    try:
+        output_paths = []
+        doc = fitz.open(str(input_path))
+        
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        for page_num in range(len(doc)):
+            page = doc[page_num]
+            mat = fitz.Matrix(dpi / 72, dpi / 72)
+            pix = page.get_pixmap(matrix=mat, alpha=False)
+            
+            output_path = output_dir / f"page_{page_num + 1:04d}.jpg"
+            pix.save(str(output_path))
+            output_paths.append(output_path)
+        
+        doc.close()
+        return output_paths
+        
+    except Exception as exc:
+        raise ImageConversionError(f"Could not convert PDF to images: {str(exc)}") from exc
+
+
+# ============================================================================
+# IMAGES TO PDF (JPG → PDF)
+# ============================================================================
+
+def images_to_pdf(input_paths: list[Path], output_path: Path, overwrite: bool = False) -> None:
+    """Convert multiple JPG/PNG images to a single PDF."""
+    input_paths = [Path(p) for p in input_paths]
+    output_path = Path(output_path)
+
+    if output_path.exists() and not overwrite:
+        raise ImageConversionError(f"Output file already exists: {output_path}")
+
+    if not input_paths:
+        raise ImageConversionError("No images provided.")
+
+    try:
+        images = []
+        
+        for img_path in input_paths:
+            if not img_path.exists():
+                raise ImageConversionError(f"Image does not exist: {img_path}")
+            
+            if not img_path.suffix.lower() in (".jpg", ".jpeg", ".png", ".gif", ".bmp"):
+                raise ImageConversionError(f"Unsupported image format: {img_path.suffix}")
+            
+            img = Image.open(str(img_path))
+            
+            # Convert to RGB if necessary
+            if img.mode in ("RGBA", "LA", "P"):
+                rgb_img = Image.new("RGB", img.size, (255, 255, 255))
+                rgb_img.paste(img, mask=img.split()[-1] if img.mode in ("RGBA", "LA") else None)
+                images.append(rgb_img)
+            else:
+                images.append(img.convert("RGB"))
+        
+        if not images:
+            raise ImageConversionError("No valid images to convert.")
+        
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        images[0].save(str(output_path), save_all=True, append_images=images[1:], format="PDF")
+        
+    except ImageConversionError:
+        raise
+    except Exception as exc:
+        raise ImageConversionError(f"Could not convert images to PDF: {str(exc)}") from exc
+
+
+# ============================================================================
+# PDF TO WORD
+# ============================================================================
+
+def pdf_to_word(input_path: Path, output_path: Path, overwrite: bool = False) -> None:
+    """Convert PDF to Word document (.docx)."""
+    input_path = Path(input_path)
+    output_path = Path(output_path)
+
+    if not input_path.exists():
+        raise PdfConversionError(f"Input PDF does not exist: {input_path}")
+
+    if output_path.exists() and not overwrite:
+        raise PdfConversionError(f"Output file already exists: {output_path}")
+
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Use pdf2docx for conversion
+        converter = PDFToWordConverter(str(input_path))
+        converter.convert(str(output_path), start=0, end=None)
+        converter.close()
+        
+    except Exception as exc:
+        raise PdfConversionError(f"Could not convert PDF to Word: {str(exc)}") from exc
+
+
+# ============================================================================
+# PDF TO POWERPOINT
+# ============================================================================
+
+def pdf_to_powerpoint(input_path: Path, output_path: Path, overwrite: bool = False) -> None:
+    """Convert PDF to PowerPoint presentation (.pptx).
+    
+    Each PDF page becomes a slide with the page image.
+    """
+    input_path = Path(input_path)
+    output_path = Path(output_path)
+
+    if not input_path.exists():
+        raise PdfConversionError(f"Input PDF does not exist: {input_path}")
+
+    if output_path.exists() and not overwrite:
+        raise PdfConversionError(f"Output file already exists: {output_path}")
+
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Create temporary directory for images
+        temp_dir = Path(tempfile.mkdtemp(prefix="pdf2ppt-"))
+        
+        try:
+            # Convert PDF pages to images
+            image_paths = pdf_to_images(input_path, temp_dir, dpi=150)
+            
+            # Create PowerPoint presentation
+            prs = Presentation()
+            
+            for img_path in image_paths:
+                # Add blank slide
+                slide_layout = prs.slide_layouts[6]  # Blank layout
+                slide = prs.slides.add_slide(slide_layout)
+                
+                # Add image to slide
+                slide.shapes.add_picture(str(img_path), 0, 0, width=Inches(10), height=Inches(7.5))
+            
+            prs.save(str(output_path))
+            
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        
+    except Exception as exc:
+        raise PdfConversionError(f"Could not convert PDF to PowerPoint: {str(exc)}") from exc
+
+
+# ============================================================================
+# PDF TO EXCEL
+# ============================================================================
+
+def pdf_to_excel(input_path: Path, output_path: Path, overwrite: bool = False) -> None:
+    """Convert PDF content to Excel workbook (.xlsx) - one sheet per page."""
+    input_path = Path(input_path)
+    output_path = Path(output_path)
+
+    if not input_path.exists():
+        raise PdfConversionError(f"Input PDF does not exist: {input_path}")
+
+    if output_path.exists() and not overwrite:
+        raise PdfConversionError(f"Output file already exists: {output_path}")
+
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Open PDF with PyMuPDF
+        doc = fitz.open(str(input_path))
+        wb = Workbook()
+        wb.remove(wb.active)  # Remove default sheet
+        
+        # Extract text from each page and create a sheet
+        for page_idx, page in enumerate(doc):
+            text = page.get_text()
+            
+            sheet_name = f"Page_{page_idx + 1}"
+            if len(sheet_name) > 31:  # Excel sheet name limit
+                sheet_name = sheet_name[:31]
+            
+            ws = wb.create_sheet(sheet_name)
+            
+            # Split text by lines and add to sheet
+            lines = text.split('\n')
+            for row_idx, line in enumerate(lines, 1):
+                # Split by whitespace to create columns
+                cells = line.split() if line.strip() else []
+                for col_idx, cell_val in enumerate(cells, 1):
+                    ws.cell(row=row_idx, column=col_idx, value=cell_val)
+        
+        doc.close()
+        wb.save(str(output_path))
+        
+    except Exception as exc:
+        raise PdfConversionError(f"Could not convert PDF to Excel: {str(exc)}") from exc
+
+
+# ============================================================================
+# OFFICE TO PDF (WORD, POWERPOINT, EXCEL)
+# ============================================================================
+
+def office_to_pdf(input_path: Path, output_path: Path, overwrite: bool = False) -> None:
+    """Convert Office documents (DOCX, XLSX, PPTX) to PDF using LibreOffice.
+    
+    Requires LibreOffice to be installed on the system.
+    """
+    input_path = Path(input_path)
+    output_path = Path(output_path)
+
+    if not input_path.exists():
+        raise OfficeConversionError(f"Input file does not exist: {input_path}")
+
+    if output_path.exists() and not overwrite:
+        raise OfficeConversionError(f"Output file already exists: {output_path}")
+
+    supported_formats = (".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt")
+    if input_path.suffix.lower() not in supported_formats:
+        raise OfficeConversionError(f"Unsupported format: {input_path.suffix}")
+
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Try using LibreOffice for conversion
+        temp_dir = Path(tempfile.mkdtemp(prefix="office2pdf-"))
+        
+        try:
+            # Use LibreOffice headless conversion
+            result = subprocess.run(
+                [
+                    "libreoffice",
+                    "--headless",
+                    "--convert-to", "pdf",
+                    "--outdir", str(temp_dir),
+                    str(input_path),
+                ],
+                capture_output=True,
+                timeout=60,
+            )
+            
+            if result.returncode != 0:
+                raise OfficeConversionError("LibreOffice conversion failed. Is LibreOffice installed?")
+            
+            # Move converted PDF to output location
+            temp_pdf = temp_dir / f"{input_path.stem}.pdf"
+            if temp_pdf.exists():
+                shutil.move(str(temp_pdf), str(output_path))
+            else:
+                raise OfficeConversionError("Conversion did not produce output file.")
+        
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        
+    except OfficeConversionError:
+        raise
+    except subprocess.TimeoutExpired as exc:
+        raise OfficeConversionError("Conversion timeout. File may be too large.") from exc
+    except Exception as exc:
+        raise OfficeConversionError(f"Could not convert Office document to PDF: {str(exc)}") from exc
+
+
+# ============================================================================
+# EDIT PDF (BASIC OPERATIONS)
+# ============================================================================
+
+def rotate_pdf_pages(input_path: Path, output_path: Path, page_ranges: str, angle: int, overwrite: bool = False) -> None:
+    """Rotate PDF pages by specified angle (90, 180, 270, -90)."""
+    input_path = Path(input_path)
+    output_path = Path(output_path)
+
+    if not input_path.exists():
+        raise PdfEditError(f"Input PDF does not exist: {input_path}")
+
+    if output_path.exists() and not overwrite:
+        raise PdfEditError(f"Output file already exists: {output_path}")
+
+    if angle not in (90, 180, 270, -90):
+        raise PdfEditError("Rotation angle must be 90, 180, 270, or -90 degrees")
+
+    try:
+        reader = PdfReader(str(input_path))
+        writer = PdfWriter()
+        
+        if reader.is_encrypted:
+            raise PdfEditError("Cannot edit encrypted PDFs.")
+        
+        # Parse page ranges
+        selected_pages = parse_page_ranges(page_ranges, len(reader.pages))
+        selected_set = set(selected_pages)
+        
+        for page_idx, page in enumerate(reader.pages):
+            if page_idx in selected_set:
+                page.rotate(angle)
+            writer.add_page(page)
+        
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with output_path.open("wb") as f:
+            writer.write(f)
+    
+    except PdfEditError:
+        raise
+    except Exception as exc:
+        raise PdfEditError(f"Could not rotate PDF pages: {str(exc)}") from exc
+
+
+def delete_pdf_pages(input_path: Path, output_path: Path, page_ranges: str, overwrite: bool = False) -> None:
+    """Delete specified pages from PDF."""
+    input_path = Path(input_path)
+    output_path = Path(output_path)
+
+    if not input_path.exists():
+        raise PdfEditError(f"Input PDF does not exist: {input_path}")
+
+    if output_path.exists() and not overwrite:
+        raise PdfEditError(f"Output file already exists: {output_path}")
+
+    try:
+        reader = PdfReader(str(input_path))
+        writer = PdfWriter()
+        
+        if reader.is_encrypted:
+            raise PdfEditError("Cannot edit encrypted PDFs.")
+        
+        # Parse page ranges to delete
+        pages_to_delete = set(parse_page_ranges(page_ranges, len(reader.pages)))
+        
+        # Add all pages except deleted ones
+        for page_idx, page in enumerate(reader.pages):
+            if page_idx not in pages_to_delete:
+                writer.add_page(page)
+        
+        if len(writer.pages) == 0:
+            raise PdfEditError("Cannot delete all pages from PDF.")
+        
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with output_path.open("wb") as f:
+            writer.write(f)
+    
+    except PdfEditError:
+        raise
+    except Exception as exc:
+        raise PdfEditError(f"Could not delete PDF pages: {str(exc)}") from exc
+
         raise PdfUnlockError(f"Could not write unlocked PDF: {output_path}") from exc
 
 
