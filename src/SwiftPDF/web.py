@@ -9,7 +9,19 @@ from uuid import uuid4
 from flask import Flask, after_this_request, jsonify, redirect, render_template, request, send_file, session, url_for
 from werkzeug.utils import secure_filename
 
-from SwiftPDF.auth import AuthError, authenticate_user, create_user, get_user, init_db
+from SwiftPDF.auth import (
+    AuthError,
+    admin_stats,
+    authenticate_user,
+    create_user,
+    get_user,
+    init_db,
+    list_audit_events,
+    list_users,
+    log_audit_event,
+    set_user_role,
+    unlock_user,
+)
 from SwiftPDF.core import (
     PdfSplitError, PdfUnlockError, split_pdf, unlock_pdf,
     PdfMergeError, merge_pdfs,
@@ -34,6 +46,12 @@ def create_app() -> Flask:
         shutil.copy2(legacy_database, app.config["DATABASE"])
 
     app.secret_key = os.environ.get("SWIFTPDF_SECRET_KEY", "dev-change-this-secret-key")
+    app.config.update(
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+        SESSION_COOKIE_SECURE=os.environ.get("SWIFTPDF_COOKIE_SECURE", "0") == "1",
+        PERMANENT_SESSION_LIFETIME=60 * 60 * 8,
+    )
     init_db(app.config["DATABASE"])
 
     def wants_json() -> bool:
@@ -55,6 +73,32 @@ def create_app() -> Flask:
             return view(*args, **kwargs)
 
         return wrapped_view
+
+    def admin_required(view):
+        @wraps(view)
+        def wrapped_view(*args, **kwargs):
+            user = current_user()
+            if user is None:
+                return redirect(url_for("login"))
+            if not user["is_admin"]:
+                log_audit("admin_denied", "Non-admin attempted to access admin area.", user["id"])
+                return render_template("index.html", error="Admin access is required.", user=user), 403
+            return view(*args, **kwargs)
+
+        return wrapped_view
+
+    def log_audit(event_type: str, details: str = "", user_id: int | None = None) -> None:
+        actor_id = user_id
+        if actor_id is None:
+            user = current_user()
+            actor_id = int(user["id"]) if user else None
+        log_audit_event(
+            app.config["DATABASE"],
+            event_type,
+            user_id=actor_id,
+            details=details,
+            ip_address=request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip(),
+        )
 
     def error_response(message: str, status_code: int):
         if wants_json():
@@ -99,6 +143,8 @@ def create_app() -> Flask:
 
         session.clear()
         session["user_id"] = user_id
+        session.permanent = True
+        log_audit("register", f"Account registered for {email}.", user_id)
         return redirect(url_for("index"))
 
     @app.route("/login", methods=["GET", "POST"])
@@ -112,16 +158,56 @@ def create_app() -> Flask:
         try:
             user = authenticate_user(app.config["DATABASE"], email, password)
         except AuthError as exc:
+            log_audit("login_failed", f"Failed login for {email}.")
             return render_template("login.html", error=str(exc), email=email), 400
 
         session.clear()
         session["user_id"] = user["id"]
+        session.permanent = True
+        log_audit("login", "User logged in.", int(user["id"]))
         return redirect(url_for("index"))
 
     @app.post("/logout")
     def logout():
+        user = current_user()
+        if user:
+            log_audit("logout", "User logged out.", int(user["id"]))
         session.clear()
         return redirect(url_for("login"))
+
+    @app.get("/admin")
+    @admin_required
+    def admin_dashboard():
+        return render_template(
+            "admin.html",
+            user=current_user(),
+            users=list_users(app.config["DATABASE"]),
+            stats=admin_stats(app.config["DATABASE"]),
+            audit_events=list_audit_events(app.config["DATABASE"], limit=75),
+        )
+
+    @app.post("/admin/users/<int:user_id>/unlock")
+    @admin_required
+    def admin_unlock_user(user_id: int):
+        unlock_user(app.config["DATABASE"], user_id)
+        log_audit("admin_unlock_user", f"Unlocked user id {user_id}.")
+        return redirect(url_for("admin_dashboard"))
+
+    @app.post("/admin/users/<int:user_id>/role")
+    @admin_required
+    def admin_set_user_role(user_id: int):
+        role = request.form.get("role", "user")
+        if int(current_user()["id"]) == user_id and role != "admin":
+            log_audit("admin_role_change_blocked", "Admin attempted to remove own admin role.")
+            return redirect(url_for("admin_dashboard"))
+
+        try:
+            set_user_role(app.config["DATABASE"], user_id, role)
+        except AuthError:
+            return redirect(url_for("admin_dashboard"))
+
+        log_audit("admin_role_changed", f"Changed user id {user_id} to {role}.")
+        return redirect(url_for("admin_dashboard"))
 
     @app.post("/unlock")
     @login_required
@@ -147,6 +233,7 @@ def create_app() -> Flask:
         except PdfUnlockError as exc:
             shutil.rmtree(work_dir, ignore_errors=True)
             return error_response(str(exc), 400)
+        log_audit("tool_unlock", f"Unlocked {filename}.")
 
         @after_this_request
         def cleanup(response):
@@ -179,6 +266,7 @@ def create_app() -> Flask:
         except PdfSplitError as exc:
             shutil.rmtree(work_dir, ignore_errors=True)
             return error_response(str(exc), 400)
+        log_audit("tool_split", f"Split {filename} with pages {page_ranges}.")
 
         @after_this_request
         def cleanup(response):
@@ -220,6 +308,7 @@ def create_app() -> Flask:
             output_path = work_dir / output_name
             
             merge_pdfs(input_paths, output_path, overwrite=True)
+            log_audit("tool_merge", f"Merged {len(input_paths)} PDF file(s).")
         except PdfMergeError as exc:
             shutil.rmtree(work_dir, ignore_errors=True)
             return error_response(str(exc), 400)
@@ -261,6 +350,7 @@ def create_app() -> Flask:
         except PdfCompressError as exc:
             shutil.rmtree(work_dir, ignore_errors=True)
             return error_response(str(exc), 400)
+        log_audit("tool_compress", f"Compressed {filename} at {level} level.")
         
         @after_this_request
         def cleanup(response):
@@ -303,6 +393,7 @@ def create_app() -> Flask:
                     zf.write(img_path, arcname=img_path.name)
             
             output_name = f"{Path(filename).stem}-images.zip"
+            log_audit("tool_pdf_to_images", f"Converted {filename} to images at {dpi} DPI.")
         except ImageConversionError as exc:
             shutil.rmtree(work_dir, ignore_errors=True)
             return error_response(str(exc), 400)
@@ -347,6 +438,7 @@ def create_app() -> Flask:
             output_path = work_dir / output_name
             
             images_to_pdf(input_paths, output_path, overwrite=True)
+            log_audit("tool_images_to_pdf", f"Created PDF from {len(input_paths)} image file(s).")
         except ImageConversionError as exc:
             shutil.rmtree(work_dir, ignore_errors=True)
             return error_response(str(exc), 400)
@@ -381,6 +473,7 @@ def create_app() -> Flask:
         except PdfConversionError as exc:
             shutil.rmtree(work_dir, ignore_errors=True)
             return error_response(str(exc), 400)
+        log_audit("tool_pdf_to_word", f"Converted {filename} to Word.")
         
         @after_this_request
         def cleanup(response):
@@ -412,6 +505,7 @@ def create_app() -> Flask:
         except PdfConversionError as exc:
             shutil.rmtree(work_dir, ignore_errors=True)
             return error_response(str(exc), 400)
+        log_audit("tool_pdf_to_powerpoint", f"Converted {filename} to PowerPoint.")
         
         @after_this_request
         def cleanup(response):
@@ -443,6 +537,7 @@ def create_app() -> Flask:
         except PdfConversionError as exc:
             shutil.rmtree(work_dir, ignore_errors=True)
             return error_response(str(exc), 400)
+        log_audit("tool_pdf_to_excel", f"Converted {filename} to Excel.")
         
         @after_this_request
         def cleanup(response):
@@ -475,6 +570,7 @@ def create_app() -> Flask:
         except OfficeConversionError as exc:
             shutil.rmtree(work_dir, ignore_errors=True)
             return error_response(str(exc), 400)
+        log_audit("tool_office_to_pdf", f"Converted {filename} to PDF.")
         
         @after_this_request
         def cleanup(response):
@@ -513,6 +609,7 @@ def create_app() -> Flask:
         except PdfEditError as exc:
             shutil.rmtree(work_dir, ignore_errors=True)
             return error_response(str(exc), 400)
+        log_audit("tool_rotate_pdf", f"Rotated {filename} by {angle} degrees.")
         
         @after_this_request
         def cleanup(response):
@@ -545,6 +642,7 @@ def create_app() -> Flask:
         except PdfEditError as exc:
             shutil.rmtree(work_dir, ignore_errors=True)
             return error_response(str(exc), 400)
+        log_audit("tool_delete_pages", f"Deleted pages {page_ranges} from {filename}.")
         
         @after_this_request
         def cleanup(response):

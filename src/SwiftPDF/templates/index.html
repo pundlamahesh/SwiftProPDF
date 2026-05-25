@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>SwiftPDF - Fast PDF Tools</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v='6') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v='7') }}">
 </head>
 <body>
     <main class="app-shell">
@@ -16,7 +16,7 @@
                 </div>
                 <div class="nav-actions">
                     <div class="tools-menu" aria-label="View all tools">
-                        <div class="tools-menu-trigger">
+                        <button class="tools-menu-trigger" type="button" aria-expanded="false" aria-controls="all-tools-menu">
                             <span class="tools-menu-icon" aria-hidden="true">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M4 4h6v6H4z" />
@@ -26,22 +26,25 @@
                                 </svg>
                             </span>
                             All Tools
-                        </div>
-                        <div class="tools-menu-panel" role="menu">
-                            <a class="tools-menu-item" href="#unlock">Unlock PDF</a>
-                            <a class="tools-menu-item" href="#merge">Merge PDF</a>
-                            <a class="tools-menu-item" href="#split">Split PDF</a>
-                            <a class="tools-menu-item" href="#compress">Compress PDF</a>
-                            <a class="tools-menu-item" href="#pdf-to-word">PDF to Word</a>
-                            <a class="tools-menu-item" href="#pdf-to-powerpoint">PDF to PowerPoint</a>
-                            <a class="tools-menu-item" href="#pdf-to-excel">PDF to Excel</a>
-                            <a class="tools-menu-item" href="#office-to-pdf">Office to PDF</a>
-                            <a class="tools-menu-item" href="#pdf-to-images">PDF to Images</a>
-                            <a class="tools-menu-item" href="#images-to-pdf">Images to PDF</a>
-                            <a class="tools-menu-item" href="#rotate-pdf">Rotate PDF</a>
-                            <a class="tools-menu-item" href="#delete-pdf-pages">Delete Pages</a>
+                        </button>
+                        <div class="tools-menu-panel" id="all-tools-menu" role="menu">
+                            <a class="tools-menu-item" role="menuitem" href="#unlock" data-tool-target="unlock">Unlock PDF</a>
+                            <a class="tools-menu-item" role="menuitem" href="#merge" data-tool-target="merge">Merge PDF</a>
+                            <a class="tools-menu-item" role="menuitem" href="#split" data-tool-target="split">Split PDF</a>
+                            <a class="tools-menu-item" role="menuitem" href="#compress" data-tool-target="compress">Compress PDF</a>
+                            <a class="tools-menu-item" role="menuitem" href="#pdf-to-word" data-tool-target="pdf-to-word">PDF to Word</a>
+                            <a class="tools-menu-item" role="menuitem" href="#pdf-to-powerpoint" data-tool-target="pdf-to-powerpoint">PDF to PowerPoint</a>
+                            <a class="tools-menu-item" role="menuitem" href="#pdf-to-excel" data-tool-target="pdf-to-excel">PDF to Excel</a>
+                            <a class="tools-menu-item" role="menuitem" href="#office-to-pdf" data-tool-target="office-to-pdf">Office to PDF</a>
+                            <a class="tools-menu-item" role="menuitem" href="#pdf-to-images" data-tool-target="pdf-to-images">PDF to Images</a>
+                            <a class="tools-menu-item" role="menuitem" href="#images-to-pdf" data-tool-target="images-to-pdf">Images to PDF</a>
+                            <a class="tools-menu-item" role="menuitem" href="#rotate-pdf" data-tool-target="rotate-pdf">Rotate PDF</a>
+                            <a class="tools-menu-item" role="menuitem" href="#delete-pdf-pages" data-tool-target="delete-pdf-pages">Delete Pages</a>
                         </div>
                     </div>
+                    {% if user.is_admin %}
+                    <a class="tools-menu-trigger admin-top-link" href="{{ url_for('admin_dashboard') }}">Admin</a>
+                    {% endif %}
                     <span class="user-pill">Welcome {{ user.full_name }}</span>
                     <form action="{{ url_for('logout') }}" method="post">
                         <button class="nav-button" type="submit">Logout</button>
@@ -538,6 +541,6 @@
             </div>
         </section>
     </main>
-    <script src="{{ url_for('static', filename='app.js', v='5') }}"></script>
+    <script src="{{ url_for('static', filename='app.js', v='7') }}"></script>
 </body>
 </html>

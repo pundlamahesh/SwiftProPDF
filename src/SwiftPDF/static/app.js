@@ -102,15 +102,56 @@ function showTool(toolName) {
     });
 }
 
-document.querySelectorAll("[data-tool-target]").forEach((trigger) => {
-    trigger.addEventListener("click", (event) => {
-        event.preventDefault();
-        const toolName = trigger.dataset.toolTarget;
-        showTool(toolName);
-        document.querySelector(`[data-tool-panel="${toolName}"]`)?.scrollIntoView({
-            behavior: "smooth",
-            block: "start",
-        });
+const toolsMenu = document.querySelector(".tools-menu");
+const toolsMenuTrigger = toolsMenu?.querySelector(".tools-menu-trigger");
+
+function closeToolsMenu() {
+    if (!toolsMenu || !toolsMenuTrigger) {
+        return;
+    }
+
+    toolsMenu.classList.remove("open");
+    toolsMenuTrigger.setAttribute("aria-expanded", "false");
+}
+
+toolsMenuTrigger?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const isOpen = toolsMenu.classList.toggle("open");
+    toolsMenuTrigger.setAttribute("aria-expanded", String(isOpen));
+});
+
+document.addEventListener("click", (event) => {
+    if (toolsMenu && !toolsMenu.contains(event.target)) {
+        closeToolsMenu();
+    }
+});
+
+document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+        closeToolsMenu();
+    }
+});
+
+document.addEventListener("click", (event) => {
+    const trigger = event.target.closest("[data-tool-target]");
+    if (!trigger) {
+        return;
+    }
+
+    const toolName = trigger.dataset.toolTarget;
+    const panel = document.querySelector(`[data-tool-panel="${toolName}"]`);
+    if (!panel) {
+        return;
+    }
+
+    event.preventDefault();
+    showTool(toolName);
+    closeToolsMenu();
+    history.replaceState(null, "", `#${toolName}`);
+    panel.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
     });
 });
 

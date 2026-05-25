@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Admin | SwiftPDF</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v='8') }}">
+</head>
+<body>
+    <main class="app-shell">
+        <header class="admin-header">
+            <div class="brand">
+                <img src="{{ url_for('static', filename='logo.svg') }}" alt="SwiftPDF" class="logo">
+                <span>SwiftPDF Admin</span>
+            </div>
+            <div class="nav-actions">
+                <a class="nav-button admin-nav-link" href="{{ url_for('index') }}">Tools</a>
+                <span class="user-pill admin-user-pill">{{ user.full_name }}</span>
+                <form action="{{ url_for('logout') }}" method="post">
+                    <button class="nav-button admin-nav-button" type="submit">Logout</button>
+                </form>
+            </div>
+        </header>
+
+        <section class="admin-title">
+            <p class="section-kicker">Control Center</p>
+            <h1>Admin dashboard</h1>
+        </section>
+
+        <section class="admin-stats" aria-label="Admin statistics">
+            <div class="admin-stat">
+                <span>Total users</span>
+                <strong>{{ stats.total_users }}</strong>
+            </div>
+            <div class="admin-stat">
+                <span>Admins</span>
+                <strong>{{ stats.admins }}</strong>
+            </div>
+            <div class="admin-stat">
+                <span>Locked accounts</span>
+                <strong>{{ stats.locked_users }}</strong>
+            </div>
+            <div class="admin-stat">
+                <span>Audit events</span>
+                <strong>{{ stats.audit_events }}</strong>
+            </div>
+        </section>
+
+        <section class="admin-section">
+            <div class="section-heading">
+                <p class="section-kicker">Access</p>
+                <h2>Users</h2>
+            </div>
+            <div class="admin-table-wrap">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Role</th>
+                            <th>Status</th>
+                            <th>Last login</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for account in users %}
+                        <tr>
+                            <td>{{ account.full_name }}</td>
+                            <td>{{ account.email }}</td>
+                            <td>
+                                <form action="{{ url_for('admin_set_user_role', user_id=account.id) }}" method="post" class="inline-form">
+                                    <select name="role" aria-label="Role for {{ account.email }}">
+                                        <option value="user" {% if account.role == 'user' %}selected{% endif %}>User</option>
+                                        <option value="admin" {% if account.role == 'admin' %}selected{% endif %}>Admin</option>
+                                    </select>
+                                    <button class="small-action" type="submit">Save</button>
+                                </form>
+                            </td>
+                            <td>
+                                {% if account.is_locked %}
+                                <span class="status-badge danger-badge">Locked</span>
+                                {% else %}
+                                <span class="status-badge">Active</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ account.last_login_at or 'Never' }}</td>
+                            <td>
+                                <form action="{{ url_for('admin_unlock_user', user_id=account.id) }}" method="post">
+                                    <button class="small-action" type="submit" {% if not account.is_locked %}disabled{% endif %}>Unlock</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="admin-section">
+            <div class="section-heading">
+                <p class="section-kicker">Security</p>
+                <h2>Recent audit events</h2>
+            </div>
+            <div class="audit-list">
+                {% for event in audit_events %}
+                <article class="audit-item">
+                    <div>
+                        <strong>{{ event.event_type }}</strong>
+                        <p>{{ event.details or 'No details' }}</p>
+                    </div>
+                    <span>{{ event.email or 'System' }} · {{ event.created_at }}</span>
+                </article>
+                {% else %}
+                <article class="audit-item">
+                    <div>
+                        <strong>No audit events yet</strong>
+                        <p>Security and admin events will appear here.</p>
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+        </section>
+    </main>
+</body>
+</html>

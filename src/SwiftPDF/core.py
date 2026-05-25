@@ -1,7 +1,4 @@
 from pathlib import Path
-from uuid import uuid4
-import io
-import os
 import shutil
 import subprocess
 import tempfile
@@ -15,7 +12,6 @@ from pdf2docx import Converter as PDFToWordConverter
 from pptx import Presentation
 from pptx.util import Inches
 from openpyxl import Workbook
-import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -236,7 +232,7 @@ def merge_pdfs(input_paths: list[Path], output_path: Path, overwrite: bool = Fal
 # ============================================================================
 
 def compress_pdf(input_path: Path, output_path: Path, level: str = "medium", overwrite: bool = False) -> None:
-    """Compress a PDF by reducing image quality and applying optimization.
+    """Compress a PDF by rewriting it with PDF stream optimization.
     
     Levels: low (minimal compression), medium (balanced), high (aggressive)
     """
@@ -252,54 +248,28 @@ def compress_pdf(input_path: Path, output_path: Path, level: str = "medium", ove
     if level not in ("low", "medium", "high"):
         raise PdfCompressError("Compression level must be: low, medium, or high")
 
-    try:
-        # Compression quality settings
-        quality_map = {
-            "low": 90,
-            "medium": 75,
-            "high": 60,
-        }
-        quality = quality_map[level]
+    cleanup_map = {
+        "low": {"garbage": 1, "clean": False},
+        "medium": {"garbage": 3, "clean": True},
+        "high": {"garbage": 4, "clean": True},
+    }
 
-        doc = fitz.open(str(input_path))
-        
-        for page_index in range(len(doc)):
-            page = doc[page_index]
-            # Get all images on the page
-            image_list = page.get_images()
-            
-            for img_index, img in enumerate(image_list):
-                xref = img[0]
-                pix = fitz.Pixmap(doc, xref)
-                
-                if pix.n - pix.alpha < 4:  # GRAY or RGB
-                    image_pil = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
-                else:  # CMYK
-                    image_pil = Image.frombytes("CMYK", (pix.width, pix.height), pix.samples)
-                
-                # Reduce image quality
-                buffer = io.BytesIO()
-                image_pil.save(buffer, format="JPEG", quality=quality, optimize=True)
-                buffer.seek(0)
-                
-                # Replace image in PDF
-                new_xref = doc.new_indirect_object()
-                new_xref.update({"Type": fitz.PDF_NAME("XObject"),
-                               "Subtype": fitz.PDF_NAME("Image")})
-        
+    try:
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Alternative simpler compression using pypdf
-        reader = PdfReader(str(input_path))
-        writer = PdfWriter()
-        
-        for page in reader.pages:
-            page.compress_content_streams()
-            writer.add_page(page)
-        
-        with output_path.open("wb") as output_file:
-            writer.write(output_file)
+
+        with fitz.open(str(input_path)) as doc:
+            if doc.needs_pass:
+                raise PdfCompressError("Encrypted PDFs must be unlocked before compressing.")
+
+            doc.save(
+                str(output_path),
+                garbage=cleanup_map[level]["garbage"],
+                deflate=True,
+                clean=cleanup_map[level]["clean"],
+            )
             
+    except PdfCompressError:
+        raise
     except Exception as exc:
         raise PdfCompressError(f"Could not compress PDF: {str(exc)}") from exc
 
@@ -602,8 +572,11 @@ def rotate_pdf_pages(input_path: Path, output_path: Path, page_ranges: str, angl
         if reader.is_encrypted:
             raise PdfEditError("Cannot edit encrypted PDFs.")
         
-        # Parse page ranges
-        selected_pages = parse_page_ranges(page_ranges, len(reader.pages))
+        selected_pages = (
+            list(range(len(reader.pages)))
+            if not page_ranges.strip()
+            else parse_page_ranges(page_ranges, len(reader.pages))
+        )
         selected_set = set(selected_pages)
         
         for page_idx, page in enumerate(reader.pages):
@@ -615,7 +588,9 @@ def rotate_pdf_pages(input_path: Path, output_path: Path, page_ranges: str, angl
         with output_path.open("wb") as f:
             writer.write(f)
     
-    except PdfEditError:
+    except (PdfEditError, PdfSplitError) as exc:
+        if isinstance(exc, PdfSplitError):
+            raise PdfEditError(str(exc)) from exc
         raise
     except Exception as exc:
         raise PdfEditError(f"Could not rotate PDF pages: {str(exc)}") from exc
@@ -654,46 +629,9 @@ def delete_pdf_pages(input_path: Path, output_path: Path, page_ranges: str, over
         with output_path.open("wb") as f:
             writer.write(f)
     
-    except PdfEditError:
+    except (PdfEditError, PdfSplitError) as exc:
+        if isinstance(exc, PdfSplitError):
+            raise PdfEditError(str(exc)) from exc
         raise
     except Exception as exc:
         raise PdfEditError(f"Could not delete PDF pages: {str(exc)}") from exc
-
-        raise PdfUnlockError(f"Could not write unlocked PDF: {output_path}") from exc
-
-
-def split_pdf(input_path: Path, output_path: Path, page_ranges: str, overwrite: bool = False) -> None:
-    """Write a new PDF containing only the requested pages."""
-    input_path = Path(input_path)
-    output_path = Path(output_path)
-
-    if not input_path.exists():
-        raise PdfSplitError(f"Input PDF does not exist: {input_path}")
-
-    if output_path.exists() and not overwrite:
-        raise PdfSplitError(f"Output file already exists: {output_path}")
-
-    try:
-        reader = PdfReader(str(input_path))
-    except Exception as exc:
-        raise PdfSplitError(f"Could not read PDF: {input_path}") from exc
-
-    if reader.is_encrypted:
-        raise PdfSplitError("Encrypted PDFs must be unlocked before splitting.")
-
-    try:
-        selected_pages = parse_page_ranges(page_ranges, len(reader.pages))
-        writer = PdfWriter()
-        for page_index in selected_pages:
-            writer.add_page(reader.pages[page_index])
-    except PdfSplitError:
-        raise
-    except Exception as exc:
-        raise PdfSplitError("Could not split this PDF.") from exc
-
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        with output_path.open("wb") as output_file:
-            writer.write(output_file)
-    except Exception as exc:
-        raise PdfSplitError(f"Could not write split PDF: {output_path}") from exc
