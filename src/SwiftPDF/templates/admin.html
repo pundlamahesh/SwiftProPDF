@@ -51,6 +51,42 @@
                 <p class="section-kicker">Access</p>
                 <h2>Users</h2>
             </div>
+
+            {% if error %}
+            <div class="alert" role="alert">{{ error }}</div>
+            {% endif %}
+
+            {% if success %}
+            <div class="alert success-alert" role="status">{{ success }}</div>
+            {% endif %}
+
+            <form class="admin-user-form" action="{{ url_for('admin_create_user') }}" method="post">
+                <label class="field">
+                    <span>First name</span>
+                    <input type="text" name="first_name" autocomplete="given-name" required>
+                </label>
+                <label class="field">
+                    <span>Last name</span>
+                    <input type="text" name="last_name" autocomplete="family-name" required>
+                </label>
+                <label class="field">
+                    <span>Email</span>
+                    <input type="email" name="email" autocomplete="email" required>
+                </label>
+                <label class="field">
+                    <span>Password</span>
+                    <input type="password" name="password" autocomplete="new-password" required>
+                </label>
+                <label class="field">
+                    <span>Role</span>
+                    <select name="role" required>
+                        <option value="user">User</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                </label>
+                <button class="primary-action admin-add-button" type="submit">Add User</button>
+            </form>
+
             <div class="admin-table-wrap">
                 <table class="admin-table">
                     <thead>
@@ -60,22 +96,27 @@
                             <th>Role</th>
                             <th>Status</th>
                             <th>Last login</th>
+                            <th>New password</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for account in users %}
                         <tr>
-                            <td>{{ account.full_name }}</td>
-                            <td>{{ account.email }}</td>
                             <td>
-                                <form action="{{ url_for('admin_set_user_role', user_id=account.id) }}" method="post" class="inline-form">
-                                    <select name="role" aria-label="Role for {{ account.email }}">
-                                        <option value="user" {% if account.role == 'user' %}selected{% endif %}>User</option>
-                                        <option value="admin" {% if account.role == 'admin' %}selected{% endif %}>Admin</option>
-                                    </select>
-                                    <button class="small-action" type="submit">Save</button>
-                                </form>
+                                <div class="admin-name-fields">
+                                    <input form="edit-user-{{ account.id }}" type="text" name="first_name" value="{{ account.first_name }}" aria-label="First name for {{ account.email }}" required>
+                                    <input form="edit-user-{{ account.id }}" type="text" name="last_name" value="{{ account.last_name }}" aria-label="Last name for {{ account.email }}" required>
+                                </div>
+                            </td>
+                            <td>
+                                <input form="edit-user-{{ account.id }}" type="email" name="email" value="{{ account.email }}" aria-label="Email for {{ account.email }}" required>
+                            </td>
+                            <td>
+                                <select form="edit-user-{{ account.id }}" name="role" aria-label="Role for {{ account.email }}">
+                                    <option value="user" {% if account.role == 'user' %}selected{% endif %}>User</option>
+                                    <option value="admin" {% if account.role == 'admin' %}selected{% endif %}>Admin</option>
+                                </select>
                             </td>
                             <td>
                                 {% if account.is_locked %}
@@ -86,9 +127,19 @@
                             </td>
                             <td>{{ account.last_login_at or 'Never' }}</td>
                             <td>
-                                <form action="{{ url_for('admin_unlock_user', user_id=account.id) }}" method="post">
+                                <input form="edit-user-{{ account.id }}" type="password" name="password" autocomplete="new-password" aria-label="New password for {{ account.email }}" placeholder="Leave blank">
+                            </td>
+                            <td>
+                                <div class="admin-row-actions">
+                                    <form id="edit-user-{{ account.id }}" action="{{ url_for('admin_update_user', user_id=account.id) }}" method="post"></form>
+                                    <button class="small-action" form="edit-user-{{ account.id }}" type="submit">Save</button>
+                                    <form action="{{ url_for('admin_unlock_user', user_id=account.id) }}" method="post">
                                     <button class="small-action" type="submit" {% if not account.is_locked %}disabled{% endif %}>Unlock</button>
-                                </form>
+                                    </form>
+                                    <form action="{{ url_for('admin_delete_user', user_id=account.id) }}" method="post">
+                                        <button class="small-action danger-action" type="submit" {% if account.id == user.id %}disabled{% endif %}>Delete</button>
+                                    </form>
+                                </div>
                             </td>
                         </tr>
                         {% endfor %}

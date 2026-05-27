@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Login with OTP | SwiftPDF</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <main class="auth-shell">
+        <section class="auth-card">
+            <div class="auth-brand">
+                <img src="{{ url_for('static', filename='logo.svg') }}" alt="SwiftPDF" class="logo">
+                <span>SwiftPDF</span>
+            </div>
+
+            <div class="auth-heading">
+                <h1>Login with OTP</h1>
+                <p>Enter your account email and we will send a 6-digit sign-in code.</p>
+            </div>
+
+            {% if error %}
+            <div class="alert" role="alert">{{ error }}</div>
+            {% endif %}
+
+            <form class="auth-form" action="{{ url_for('login_otp') }}" method="post">
+                <label class="field">
+                    <span>Email</span>
+                    <input type="email" name="email" value="{{ email or '' }}" autocomplete="email" required autofocus>
+                </label>
+
+                <button class="primary-action" type="submit">Send OTP</button>
+            </form>
+
+            <p class="auth-switch">Prefer password? <a href="{{ url_for('login') }}">Login with password</a></p>
+        </section>
+    </main>
+</body>
+</html>

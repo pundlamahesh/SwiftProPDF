@@ -2,25 +2,35 @@ import argparse
 import os
 import shutil
 import tempfile
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 from pathlib import Path
 from uuid import uuid4
 
 from flask import Flask, after_this_request, jsonify, redirect, render_template, request, send_file, session, url_for
+from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 from SwiftPDF.auth import (
     AuthError,
     admin_stats,
+    authenticate_user_by_otp,
     authenticate_user,
     create_user,
+    create_user_with_role,
+    create_verified_user,
+    delete_user,
     get_user,
+    get_user_by_email,
     init_db,
     list_audit_events,
     list_users,
     log_audit_event,
     set_user_role,
     unlock_user,
+    update_user_password,
+    update_user,
+    validate_registration_details,
 )
 from SwiftPDF.core import (
     PdfSplitError, PdfUnlockError, split_pdf, unlock_pdf,
@@ -31,9 +41,30 @@ from SwiftPDF.core import (
     OfficeConversionError, office_to_pdf,
     PdfEditError, rotate_pdf_pages, delete_pdf_pages,
 )
+from SwiftPDF.email_otp import (
+    EmailOtpError,
+    generate_otp,
+    send_login_otp,
+    send_password_reset_otp,
+    send_registration_otp,
+)
+
+
+def load_env_file() -> None:
+    env_path = Path.cwd() / ".env"
+    if not env_path.exists():
+        return
+
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip().strip("\"'"))
 
 
 def create_app() -> Flask:
+    load_env_file()
     app = Flask(__name__)
     app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024
     package_instance = Path(app.root_path) / "instance"
@@ -105,6 +136,56 @@ def create_app() -> Flask:
             return jsonify({"error": message}), status_code
         return render_template("index.html", error=message, user=current_user()), status_code
 
+    def render_register(error: str = "", **values):
+        return render_template("register.html", error=error, **values)
+
+    def render_verify_registration(error: str = ""):
+        pending = session.get("pending_registration") or {}
+        return render_template(
+            "verify_registration.html",
+            error=error,
+            email=pending.get("email", ""),
+        )
+
+    def otp_expiry() -> datetime:
+        return datetime.now(timezone.utc) + timedelta(
+            minutes=int(os.environ.get("REGISTRATION_OTP_EXPIRY_MINUTES", "10"))
+        )
+
+    def store_pending_otp(key: str, email: str, otp: str) -> None:
+        session[key] = {
+            "email": email.strip().lower(),
+            "otp_hash": generate_password_hash(otp),
+            "expires_at": otp_expiry().isoformat(),
+        }
+        session.permanent = True
+
+    def verify_pending_otp(key: str, otp: str) -> tuple[dict, str]:
+        pending = session.get(key)
+        if not pending:
+            return {}, "Verification session expired. Please request a new code."
+
+        expires_at = datetime.fromisoformat(pending["expires_at"])
+        if expires_at < datetime.now(timezone.utc):
+            session.pop(key, None)
+            return {}, "Verification code expired. Please request a new code."
+
+        if not check_password_hash(pending["otp_hash"], otp.strip()):
+            return pending, "Invalid verification code."
+
+        return pending, ""
+
+    def render_admin(error: str = "", success: str = "", status_code: int = 200):
+        return render_template(
+            "admin.html",
+            user=current_user(),
+            users=list_users(app.config["DATABASE"]),
+            stats=admin_stats(app.config["DATABASE"]),
+            audit_events=list_audit_events(app.config["DATABASE"], limit=75),
+            error=error,
+            success=success,
+        ), status_code
+
     @app.get("/")
     @login_required
     def index():
@@ -122,8 +203,7 @@ def create_app() -> Flask:
         confirm_password = request.form.get("confirm_password", "")
 
         if password != confirm_password:
-            return render_template(
-                "register.html",
+            return render_register(
                 error="Passwords do not match.",
                 first_name=first_name,
                 last_name=last_name,
@@ -131,20 +211,71 @@ def create_app() -> Flask:
             ), 400
 
         try:
-            user_id = create_user(app.config["DATABASE"], first_name, last_name, email, password)
+            validate_registration_details(app.config["DATABASE"], first_name, last_name, email.strip().lower(), password)
         except AuthError as exc:
-            return render_template(
-                "register.html",
+            return render_register(
                 error=str(exc),
                 first_name=first_name,
                 last_name=last_name,
                 email=email,
             ), 400
 
+        otp = generate_otp()
+        try:
+            send_registration_otp(email.strip().lower(), otp)
+        except EmailOtpError as exc:
+            return render_register(
+                error=str(exc),
+                first_name=first_name,
+                last_name=last_name,
+                email=email,
+            ), 500
+
+        session["pending_registration"] = {
+            "first_name": first_name,
+            "last_name": last_name,
+            "email": email.strip().lower(),
+            "password_hash": generate_password_hash(password),
+            "otp_hash": generate_password_hash(otp),
+            "expires_at": otp_expiry().isoformat(),
+        }
+        session.permanent = True
+        log_audit("registration_otp_sent", f"Sent registration OTP to {email.strip().lower()}.")
+        return redirect(url_for("verify_registration"))
+
+    @app.route("/register/verify", methods=["GET", "POST"])
+    def verify_registration():
+        pending = session.get("pending_registration")
+        if not pending:
+            return redirect(url_for("register"))
+
+        if request.method == "GET":
+            return render_verify_registration()
+
+        expires_at = datetime.fromisoformat(pending["expires_at"])
+        if expires_at < datetime.now(timezone.utc):
+            session.pop("pending_registration", None)
+            return render_register(error="Verification code expired. Please register again."), 400
+
+        otp = request.form.get("otp", "").strip()
+        if not check_password_hash(pending["otp_hash"], otp):
+            return render_verify_registration(error="Invalid verification code."), 400
+
         session.clear()
+        try:
+            user_id = create_verified_user(
+                app.config["DATABASE"],
+                pending["first_name"],
+                pending["last_name"],
+                pending["email"],
+                pending["password_hash"],
+            )
+        except AuthError as exc:
+            return render_register(error=str(exc), email=pending["email"]), 400
+
         session["user_id"] = user_id
         session.permanent = True
-        log_audit("register", f"Account registered for {email}.", user_id)
+        log_audit("register", f"Account registered for {pending['email']}.", user_id)
         return redirect(url_for("index"))
 
     @app.route("/login", methods=["GET", "POST"])
@@ -167,6 +298,98 @@ def create_app() -> Flask:
         log_audit("login", "User logged in.", int(user["id"]))
         return redirect(url_for("index"))
 
+    @app.route("/login/otp", methods=["GET", "POST"])
+    def login_otp():
+        if request.method == "GET":
+            return render_template("login_otp.html")
+
+        email = request.form.get("email", "").strip().lower()
+        account = get_user_by_email(app.config["DATABASE"], email)
+        if account is None:
+            return render_template("login_otp.html", error="Account not found.", email=email), 404
+
+        otp = generate_otp()
+        try:
+            send_login_otp(email, otp)
+        except EmailOtpError as exc:
+            return render_template("login_otp.html", error=str(exc), email=email), 500
+
+        store_pending_otp("pending_login_otp", email, otp)
+        log_audit("login_otp_sent", f"Sent login OTP to {email}.", int(account["id"]))
+        return redirect(url_for("verify_login_otp"))
+
+    @app.route("/login/otp/verify", methods=["GET", "POST"])
+    def verify_login_otp():
+        pending = session.get("pending_login_otp")
+        if not pending:
+            return redirect(url_for("login_otp"))
+
+        if request.method == "GET":
+            return render_template("verify_login_otp.html", email=pending["email"])
+
+        pending, error = verify_pending_otp("pending_login_otp", request.form.get("otp", ""))
+        if error:
+            return render_template("verify_login_otp.html", error=error, email=pending.get("email", "")), 400
+
+        session.clear()
+        try:
+            user = authenticate_user_by_otp(app.config["DATABASE"], pending["email"])
+        except AuthError as exc:
+            return render_template("login_otp.html", error=str(exc), email=pending["email"]), 400
+
+        session["user_id"] = user["id"]
+        session.permanent = True
+        log_audit("login_otp", "User logged in with OTP.", int(user["id"]))
+        return redirect(url_for("index"))
+
+    @app.route("/forgot-password", methods=["GET", "POST"])
+    def forgot_password():
+        if request.method == "GET":
+            return render_template("forgot_password.html")
+
+        email = request.form.get("email", "").strip().lower()
+        account = get_user_by_email(app.config["DATABASE"], email)
+        if account is None:
+            return render_template("forgot_password.html", error="Account not found.", email=email), 404
+
+        otp = generate_otp()
+        try:
+            send_password_reset_otp(email, otp)
+        except EmailOtpError as exc:
+            return render_template("forgot_password.html", error=str(exc), email=email), 500
+
+        store_pending_otp("pending_password_reset", email, otp)
+        log_audit("password_reset_otp_sent", f"Sent password reset OTP to {email}.", int(account["id"]))
+        return redirect(url_for("reset_password"))
+
+    @app.route("/reset-password", methods=["GET", "POST"])
+    def reset_password():
+        pending = session.get("pending_password_reset")
+        if not pending:
+            return redirect(url_for("forgot_password"))
+
+        if request.method == "GET":
+            return render_template("reset_password.html", email=pending["email"])
+
+        pending, error = verify_pending_otp("pending_password_reset", request.form.get("otp", ""))
+        password = request.form.get("password", "")
+        confirm_password = request.form.get("confirm_password", "")
+        if error:
+            return render_template("reset_password.html", error=error, email=pending.get("email", "")), 400
+
+        if password != confirm_password:
+            return render_template("reset_password.html", error="Passwords do not match.", email=pending["email"]), 400
+
+        try:
+            update_user_password(app.config["DATABASE"], pending["email"], password)
+        except AuthError as exc:
+            return render_template("reset_password.html", error=str(exc), email=pending["email"]), 400
+
+        session.pop("pending_password_reset", None)
+        account = get_user_by_email(app.config["DATABASE"], pending["email"])
+        log_audit("password_reset", f"Password reset completed for {pending['email']}.", int(account["id"]) if account else None)
+        return render_template("login.html", status="Password reset complete. You can log in now.", email=pending["email"])
+
     @app.post("/logout")
     def logout():
         user = current_user()
@@ -178,13 +401,75 @@ def create_app() -> Flask:
     @app.get("/admin")
     @admin_required
     def admin_dashboard():
-        return render_template(
-            "admin.html",
-            user=current_user(),
-            users=list_users(app.config["DATABASE"]),
-            stats=admin_stats(app.config["DATABASE"]),
-            audit_events=list_audit_events(app.config["DATABASE"], limit=75),
-        )
+        return render_admin()
+
+    @app.post("/admin/users")
+    @admin_required
+    def admin_create_user():
+        first_name = request.form.get("first_name", "")
+        last_name = request.form.get("last_name", "")
+        email = request.form.get("email", "")
+        password = request.form.get("password", "")
+        role = request.form.get("role", "user")
+
+        try:
+            user_id = create_user_with_role(app.config["DATABASE"], first_name, last_name, email, password, role)
+        except AuthError as exc:
+            return render_admin(error=str(exc), status_code=400)
+
+        log_audit("admin_create_user", f"Created user id {user_id} ({email}) with role {role}.")
+        return redirect(url_for("admin_dashboard"))
+
+    @app.post("/admin/users/<int:user_id>")
+    @admin_required
+    def admin_update_user(user_id: int):
+        active_user = current_user()
+        role = request.form.get("role", "user")
+
+        if int(active_user["id"]) == user_id and role != "admin":
+            log_audit("admin_role_change_blocked", "Admin attempted to remove own admin role.")
+            return render_admin(error="You cannot remove your own admin role.", status_code=400)
+
+        if role != "admin" and admin_stats(app.config["DATABASE"])["admins"] <= 1:
+            existing_user = get_user(app.config["DATABASE"], user_id)
+            if existing_user and existing_user["is_admin"]:
+                return render_admin(error="At least one admin account is required.", status_code=400)
+
+        try:
+            update_user(
+                app.config["DATABASE"],
+                user_id,
+                request.form.get("first_name", ""),
+                request.form.get("last_name", ""),
+                request.form.get("email", ""),
+                role,
+                request.form.get("password", ""),
+            )
+        except AuthError as exc:
+            return render_admin(error=str(exc), status_code=400)
+
+        log_audit("admin_update_user", f"Updated user id {user_id}.")
+        return redirect(url_for("admin_dashboard"))
+
+    @app.post("/admin/users/<int:user_id>/delete")
+    @admin_required
+    def admin_delete_user(user_id: int):
+        active_user = current_user()
+        if int(active_user["id"]) == user_id:
+            log_audit("admin_delete_blocked", "Admin attempted to delete own account.")
+            return render_admin(error="You cannot delete your own account.", status_code=400)
+
+        account = get_user(app.config["DATABASE"], user_id)
+        if account is None:
+            return render_admin(error="User not found.", status_code=404)
+
+        if account["is_admin"] and admin_stats(app.config["DATABASE"])["admins"] <= 1:
+            return render_admin(error="At least one admin account is required.", status_code=400)
+
+        email = str(account["email"])
+        delete_user(app.config["DATABASE"], user_id)
+        log_audit("admin_delete_user", f"Deleted user {email}.")
+        return redirect(url_for("admin_dashboard"))
 
     @app.post("/admin/users/<int:user_id>/unlock")
     @admin_required
@@ -200,6 +485,11 @@ def create_app() -> Flask:
         if int(current_user()["id"]) == user_id and role != "admin":
             log_audit("admin_role_change_blocked", "Admin attempted to remove own admin role.")
             return redirect(url_for("admin_dashboard"))
+
+        if role != "admin" and admin_stats(app.config["DATABASE"])["admins"] <= 1:
+            existing_user = get_user(app.config["DATABASE"], user_id)
+            if existing_user and existing_user["is_admin"]:
+                return redirect(url_for("admin_dashboard"))
 
         try:
             set_user_role(app.config["DATABASE"], user_id, role)

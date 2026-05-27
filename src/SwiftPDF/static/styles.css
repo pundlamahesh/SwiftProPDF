@@ -598,6 +598,13 @@ input[type="file"] {
     padding: 11px;
 }
 
+.otp-input {
+    font-size: 1.35rem;
+    font-weight: 850;
+    letter-spacing: 0.18em;
+    text-align: center;
+}
+
 select {
     width: 100%;
     min-height: 48px;
@@ -721,6 +728,19 @@ input:focus {
     gap: 18px;
 }
 
+.auth-links {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px 18px;
+    margin-top: 18px;
+}
+
+.auth-links a {
+    color: var(--accent);
+    font-weight: 800;
+}
+
 .field-row {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -816,6 +836,29 @@ button:disabled {
     margin-top: 28px;
 }
 
+.admin-user-form {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 12px;
+    align-items: end;
+    margin-bottom: 18px;
+    padding: 16px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #ffffff;
+    box-shadow: 0 14px 30px rgba(78, 93, 132, 0.08);
+}
+
+.admin-add-button {
+    margin-top: 0;
+    border-radius: 6px;
+}
+
+.success-alert {
+    background: var(--success-bg);
+    color: var(--success);
+}
+
 .admin-table-wrap {
     overflow-x: auto;
     border: 1px solid var(--line);
@@ -826,7 +869,7 @@ button:disabled {
 
 .admin-table {
     width: 100%;
-    min-width: 900px;
+    min-width: 1180px;
     border-collapse: collapse;
 }
 
@@ -862,6 +905,26 @@ button:disabled {
     min-width: 120px;
 }
 
+.admin-table input,
+.admin-table select {
+    min-height: 38px;
+    padding: 0 10px;
+    background: #ffffff;
+}
+
+.admin-name-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(90px, 1fr));
+    gap: 8px;
+}
+
+.admin-row-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+}
+
 .small-action {
     min-height: 38px;
     padding: 0 12px;
@@ -876,6 +939,14 @@ button:disabled {
 
 .small-action:hover:not(:disabled) {
     background: var(--accent-soft);
+}
+
+.danger-action {
+    color: var(--danger);
+}
+
+.danger-action:hover:not(:disabled) {
+    background: var(--danger-bg);
 }
 
 .status-badge {
@@ -935,6 +1006,10 @@ button:disabled {
     }
 
     .admin-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .admin-user-form {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
@@ -1025,6 +1100,10 @@ button:disabled {
     }
 
     .admin-stats {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-user-form {
         grid-template-columns: 1fr;
     }
 

@@ -81,11 +81,45 @@ def create_user(database_path: Path, first_name: str, last_name: str, email: str
     first_name = normalize_name(first_name)
     last_name = normalize_name(last_name)
     email = normalize_email(email)
+    validate_registration_details(database_path, first_name, last_name, email, password)
+
+    password_hash = generate_password_hash(password)
+    return create_verified_user(database_path, first_name, last_name, email, password_hash)
+
+
+def validate_registration_details(
+    database_path: Path,
+    first_name: str,
+    last_name: str,
+    email: str,
+    password: str,
+) -> None:
+    first_name = normalize_name(first_name)
+    last_name = normalize_name(last_name)
+    email = normalize_email(email)
     validate_name(first_name, "First name")
     validate_name(last_name, "Last name")
     validate_credentials(email, password)
 
-    password_hash = generate_password_hash(password)
+    with sqlite3.connect(database_path) as connection:
+        existing = connection.execute(
+            "SELECT 1 FROM users WHERE email = ?",
+            (email,),
+        ).fetchone()
+    if existing:
+        raise AuthError("An account with this email already exists.")
+
+
+def create_verified_user(
+    database_path: Path,
+    first_name: str,
+    last_name: str,
+    email: str,
+    password_hash: str,
+) -> int:
+    first_name = normalize_name(first_name)
+    last_name = normalize_name(last_name)
+    email = normalize_email(email)
     role = "admin" if user_count(database_path) == 0 else "user"
 
     try:
@@ -100,6 +134,76 @@ def create_user(database_path: Path, first_name: str, last_name: str, email: str
             return int(cursor.lastrowid)
     except sqlite3.IntegrityError as exc:
         raise AuthError("An account with this email already exists.") from exc
+
+
+def create_user_with_role(
+    database_path: Path,
+    first_name: str,
+    last_name: str,
+    email: str,
+    password: str,
+    role: str,
+) -> int:
+    if role not in ("admin", "user"):
+        raise AuthError("Invalid role.")
+
+    user_id = create_user(database_path, first_name, last_name, email, password)
+    set_user_role(database_path, user_id, role)
+    return user_id
+
+
+def update_user(
+    database_path: Path,
+    user_id: int,
+    first_name: str,
+    last_name: str,
+    email: str,
+    role: str,
+    password: str = "",
+) -> None:
+    first_name = normalize_name(first_name)
+    last_name = normalize_name(last_name)
+    email = normalize_email(email)
+    validate_name(first_name, "First name")
+    validate_name(last_name, "Last name")
+
+    if not email or "@" not in email:
+        raise AuthError("Enter a valid email address.")
+
+    if role not in ("admin", "user"):
+        raise AuthError("Invalid role.")
+
+    if password:
+        validate_credentials(email, password)
+
+    try:
+        with sqlite3.connect(database_path) as connection:
+            if password:
+                connection.execute(
+                    """
+                    UPDATE users
+                    SET first_name = ?, last_name = ?, email = ?, role = ?, password_hash = ?
+                    WHERE id = ?
+                    """,
+                    (first_name, last_name, email, role, generate_password_hash(password), user_id),
+                )
+            else:
+                connection.execute(
+                    """
+                    UPDATE users
+                    SET first_name = ?, last_name = ?, email = ?, role = ?
+                    WHERE id = ?
+                    """,
+                    (first_name, last_name, email, role, user_id),
+                )
+    except sqlite3.IntegrityError as exc:
+        raise AuthError("An account with this email already exists.") from exc
+
+
+def delete_user(database_path: Path, user_id: int) -> None:
+    with sqlite3.connect(database_path) as connection:
+        connection.execute("DELETE FROM audit_events WHERE user_id = ?", (user_id,))
+        connection.execute("DELETE FROM users WHERE id = ?", (user_id,))
 
 
 def authenticate_user(database_path: Path, email: str, password: str) -> dict[str, str | int]:
@@ -156,6 +260,24 @@ def authenticate_user(database_path: Path, email: str, password: str) -> dict[st
     return get_user(database_path, int(user["id"]))
 
 
+def authenticate_user_by_otp(database_path: Path, email: str) -> dict[str, str | int]:
+    user = get_user_by_email(database_path, email)
+    if user is None:
+        raise AuthError("Account not found.")
+
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            """
+            UPDATE users
+            SET failed_login_count = 0, locked_until = NULL, last_login_at = ?
+            WHERE id = ?
+            """,
+            (utc_now().isoformat(), user["id"]),
+        )
+
+    return get_user(database_path, int(user["id"]))
+
+
 def get_user(database_path: Path, user_id: int) -> dict[str, str | int] | None:
     with sqlite3.connect(database_path) as connection:
         connection.row_factory = sqlite3.Row
@@ -167,6 +289,26 @@ def get_user(database_path: Path, user_id: int) -> dict[str, str | int] | None:
             WHERE id = ?
             """,
             (user_id,),
+        ).fetchone()
+
+    if user is None:
+        return None
+
+    return user_to_dict(user)
+
+
+def get_user_by_email(database_path: Path, email: str) -> dict[str, str | int] | None:
+    email = normalize_email(email)
+    with sqlite3.connect(database_path) as connection:
+        connection.row_factory = sqlite3.Row
+        user = connection.execute(
+            """
+            SELECT id, first_name, last_name, email, role, failed_login_count,
+                   locked_until, last_login_at, created_at
+            FROM users
+            WHERE email = ?
+            """,
+            (email,),
         ).fetchone()
 
     if user is None:
@@ -204,6 +346,22 @@ def unlock_user(database_path: Path, user_id: int) -> None:
             "UPDATE users SET failed_login_count = 0, locked_until = NULL WHERE id = ?",
             (user_id,),
         )
+
+
+def update_user_password(database_path: Path, email: str, password: str) -> None:
+    email = normalize_email(email)
+    validate_credentials(email, password)
+    with sqlite3.connect(database_path) as connection:
+        cursor = connection.execute(
+            """
+            UPDATE users
+            SET password_hash = ?, failed_login_count = 0, locked_until = NULL
+            WHERE email = ?
+            """,
+            (generate_password_hash(password), email),
+        )
+    if cursor.rowcount == 0:
+        raise AuthError("Account not found.")
 
 
 def log_audit_event(

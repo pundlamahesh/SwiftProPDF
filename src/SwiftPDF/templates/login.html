@@ -23,6 +23,10 @@
             <div class="alert" role="alert">{{ error }}</div>
             {% endif %}
 
+            {% if status %}
+            <div class="status success-alert" role="status">{{ status }}</div>
+            {% endif %}
+
             <form class="auth-form" action="{{ url_for('login') }}" method="post">
                 <label class="field">
                     <span>Email</span>
@@ -36,6 +40,11 @@
 
                 <button class="primary-action" type="submit">Login</button>
             </form>
+
+            <div class="auth-links">
+                <a href="{{ url_for('login_otp') }}">Login with OTP</a>
+                <a href="{{ url_for('forgot_password') }}">Forgot password?</a>
+            </div>
 
             <p class="auth-switch">Need an account? <a href="{{ url_for('register') }}">Register</a></p>
         </section>
