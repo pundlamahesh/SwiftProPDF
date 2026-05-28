@@ -24,7 +24,7 @@ camelot-py[cv]>=0.11.0
 
 # Office Document Processing
 python-pptx>=0.6.21
-openpyxl>=3.10.0
+openpyxl>=3.1.5
 pandas>=2.0.0
 
 # Image Processing
