@@ -14,7 +14,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libreoffice-writer \
     libreoffice-calc \
     libreoffice-impress \
-    unoconv \
     ghostscript \
     libmagic1 \
     fonts-liberation \
