@@ -52,6 +52,10 @@ class PdfEditError(Exception):
     """Raised when PDF editing fails."""
 
 
+class QrCodeError(Exception):
+    """Raised when QR code generation fails."""
+
+
 # ============================================================================
 # EXISTING FUNCTIONS (UNLOCK & SPLIT)
 # ============================================================================
@@ -361,6 +365,42 @@ def images_to_pdf(input_paths: list[Path], output_path: Path, overwrite: bool = 
         raise ImageConversionError(f"Could not convert images to PDF: {str(exc)}") from exc
 
 
+def generate_qr_code(data: str, output_path: Path, size: int = 500, overwrite: bool = False) -> None:
+    """Generate a QR code PNG image from a URL or text."""
+    output_path = Path(output_path)
+
+    if output_path.exists() and not overwrite:
+        raise QrCodeError(f"Output file already exists: {output_path}")
+
+    try:
+        import qrcode
+        from qrcode.constants import ERROR_CORRECT_M
+    except ImportError as exc:
+        raise QrCodeError("Install the qrcode package to generate QR codes.") from exc
+
+    try:
+        qr = qrcode.QRCode(
+            version=None,
+            error_correction=ERROR_CORRECT_M,
+            box_size=10,
+            border=4,
+        )
+        qr.add_data(data)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="black", back_color="white")
+
+        if hasattr(img, "convert"):
+            img = img.convert("RGB")
+
+        resample = getattr(getattr(Image, "Resampling", Image), "LANCZOS", Image.LANCZOS)
+        img = img.resize((size, size), resample=resample)
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        img.save(output_path, format="PNG")
+    except Exception as exc:
+        raise QrCodeError("Could not generate the QR code.") from exc
+
+
 # ============================================================================
 # PDF TO WORD
 # ============================================================================
@@ -489,10 +529,13 @@ def pdf_to_excel(input_path: Path, output_path: Path, overwrite: bool = False) -
 # ============================================================================
 
 def office_to_pdf(input_path: Path, output_path: Path, overwrite: bool = False) -> None:
-    """Convert Office documents (DOCX, XLSX, PPTX) to PDF using LibreOffice.
-    
-    Requires LibreOffice to be installed on the system.
-    """
+    """Convert Office documents (DOCX, XLSX, PPTX) to PDF using LibreOffice."""
+    import os
+    import shutil
+    import tempfile
+    import subprocess
+    from pathlib import Path
+
     input_path = Path(input_path)
     output_path = Path(output_path)
 
@@ -503,48 +546,78 @@ def office_to_pdf(input_path: Path, output_path: Path, overwrite: bool = False) 
         raise OfficeConversionError(f"Output file already exists: {output_path}")
 
     supported_formats = (".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt")
+
     if input_path.suffix.lower() not in supported_formats:
-        raise OfficeConversionError(f"Unsupported format: {input_path.suffix}")
+        raise OfficeConversionError(
+            f"Unsupported format: {input_path.suffix}"
+        )
 
     try:
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Try using LibreOffice for conversion
+
         temp_dir = Path(tempfile.mkdtemp(prefix="office2pdf-"))
         
+
         try:
-            # Use LibreOffice headless conversion
+            #print("PATH =", os.environ.get("PATH"))
+            #print("which soffice =", shutil.which("soffice"))
+            #print("which libreoffice =", shutil.which("libreoffice"))
+            libreoffice_cmd = (
+                shutil.which("soffice")
+                or shutil.which("libreoffice")
+            )
+
+            if not libreoffice_cmd:
+                raise OfficeConversionError(
+                    "LibreOffice is not installed or not available in PATH."
+                )
+
             result = subprocess.run(
                 [
-                    "libreoffice",
+                    libreoffice_cmd,
                     "--headless",
-                    "--convert-to", "pdf",
-                    "--outdir", str(temp_dir),
+                    "--convert-to",
+                    "pdf",
+                    "--outdir",
+                    str(temp_dir),
                     str(input_path),
                 ],
                 capture_output=True,
+                text=True,
                 timeout=60,
             )
-            
+
             if result.returncode != 0:
-                raise OfficeConversionError("LibreOffice conversion failed. Is LibreOffice installed?")
-            
-            # Move converted PDF to output location
+                raise OfficeConversionError(
+                    f"LibreOffice conversion failed:\n"
+                    f"STDOUT: {result.stdout}\n"
+                    f"STDERR: {result.stderr}"
+                )
+
             temp_pdf = temp_dir / f"{input_path.stem}.pdf"
-            if temp_pdf.exists():
-                shutil.move(str(temp_pdf), str(output_path))
-            else:
-                raise OfficeConversionError("Conversion did not produce output file.")
-        
+
+            if not temp_pdf.exists():
+                raise OfficeConversionError(
+                    f"Conversion completed but PDF not found: {temp_pdf}"
+                )
+
+            shutil.move(str(temp_pdf), str(output_path))
+
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
-        
+
     except OfficeConversionError:
         raise
+
     except subprocess.TimeoutExpired as exc:
-        raise OfficeConversionError("Conversion timeout. File may be too large.") from exc
+        raise OfficeConversionError(
+            "Conversion timeout. File may be too large."
+        ) from exc
+
     except Exception as exc:
-        raise OfficeConversionError(f"Could not convert Office document to PDF: {str(exc)}") from exc
+        raise OfficeConversionError(
+            f"Could not convert Office document to PDF: {str(exc)}"
+        ) from exc
 
 
 # ============================================================================

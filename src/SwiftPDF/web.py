@@ -2,23 +2,21 @@ import argparse
 import os
 import shutil
 import tempfile
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from functools import wraps
 from pathlib import Path
 from uuid import uuid4
+from urllib.parse import urlparse
 
-from flask import Flask, after_this_request, jsonify, redirect, render_template, request, send_file, session, url_for
-from werkzeug.security import check_password_hash, generate_password_hash
+from flask import Flask, abort, after_this_request, g, jsonify, redirect, render_template, request, send_file, session, url_for
 from werkzeug.utils import secure_filename
 
 from SwiftPDF.auth import (
     AuthError,
     admin_stats,
-    authenticate_user_by_otp,
     authenticate_user,
     create_user,
     create_user_with_role,
-    create_verified_user,
     delete_user,
     get_user,
     get_user_by_email,
@@ -26,11 +24,22 @@ from SwiftPDF.auth import (
     list_audit_events,
     list_users,
     log_audit_event,
+    set_user_security_questions,
     set_user_role,
     unlock_user,
-    update_user_password,
     update_user,
+    update_user_password,
+    validate_security_answers,
     validate_registration_details,
+    verify_user_password,
+    verify_user_security_answers,
+    get_setting,
+    set_setting,
+    ensure_default_settings,
+    reset_all_weekly_usage,
+    get_total_usage,
+    get_weekly_total_usage,
+    record_tool_usage,
 )
 from SwiftPDF.core import (
     PdfSplitError, PdfUnlockError, split_pdf, unlock_pdf,
@@ -39,15 +48,9 @@ from SwiftPDF.core import (
     ImageConversionError, pdf_to_images, images_to_pdf,
     PdfConversionError, pdf_to_word, pdf_to_powerpoint, pdf_to_excel,
     OfficeConversionError, office_to_pdf,
-    PdfEditError, rotate_pdf_pages, delete_pdf_pages,
+    PdfEditError, QrCodeError, generate_qr_code, rotate_pdf_pages, delete_pdf_pages,
 )
-from SwiftPDF.email_otp import (
-    EmailOtpError,
-    generate_otp,
-    send_login_otp,
-    send_password_reset_otp,
-    send_registration_otp,
-)
+
 
 
 def load_env_file() -> None:
@@ -84,6 +87,276 @@ def create_app() -> Flask:
         PERMANENT_SESSION_LIFETIME=60 * 60 * 8,
     )
     init_db(app.config["DATABASE"])
+    ensure_default_settings(app.config["DATABASE"])
+
+    @app.context_processor
+    def inject_globals():
+        return {
+            "current_year": datetime.now().year,
+            "user": current_user(),
+            "remaining_quota": get_remaining_quota(),
+            "usage_limit": get_usage_limit(),
+            "quota_message": get_quota_message(),
+        }
+
+    tools = [
+        {
+            "path": "unlock",
+            "title": "Unlock PDF",
+            "icon_html": "🔓",
+            "description": "Remove password protection from your PDF in seconds.",
+            "post_route": "unlock",
+            "input_label": "Locked PDF",
+            "input_name": "pdf",
+            "accept": "application/pdf,.pdf",
+            "multiple": False,
+            "action_label": "Unlock PDF",
+            "fields": [
+                {"type": "password", "name": "password", "label": "Password", "placeholder": "Enter PDF password", "required": False},
+            ],
+            "related": ["compress", "split", "merge"],
+            "tips": ["Keep your password ready.", "Only PDF files are accepted.", "Download starts automatically."],
+        },
+        {
+            "path": "split",
+            "title": "Split PDF",
+            "icon_html": "✂️",
+            "description": "Extract selected pages from a PDF into a new file.",
+            "post_route": "split",
+            "input_label": "PDF file",
+            "input_name": "pdf",
+            "accept": "application/pdf,.pdf",
+            "multiple": False,
+            "action_label": "Split PDF",
+            "fields": [
+                {"type": "text", "name": "page_ranges", "label": "Pages to extract", "placeholder": "Example: 1-3,5", "required": True},
+            ],
+            "related": ["merge", "compress", "delete-pages"],
+            "tips": ["Use commas for separate pages.", "Use a dash for ranges.", "Leave blank for full export."],
+        },
+        {
+            "path": "merge",
+            "title": "Merge PDF",
+            "icon_html": "📚",
+            "description": "Combine multiple PDF files into one document.",
+            "post_route": "merge",
+            "input_label": "PDF files",
+            "input_name": "pdfs",
+            "accept": "application/pdf,.pdf",
+            "multiple": True,
+            "action_label": "Merge PDFs",
+            "fields": [],
+            "related": ["split", "compress", "delete-pages"],
+            "tips": ["Upload files in the order you want them merged.", "Use at least two PDFs.", "The result downloads automatically."],
+        },
+        {
+            "path": "compress",
+            "title": "Compress PDF",
+            "icon_html": "🗜️",
+            "description": "Reduce PDF size for faster sharing and storage.",
+            "post_route": "compress",
+            "input_label": "PDF file",
+            "input_name": "pdf",
+            "accept": "application/pdf,.pdf",
+            "multiple": False,
+            "action_label": "Compress PDF",
+            "fields": [
+                {
+                    "type": "select",
+                    "name": "level",
+                    "label": "Compression level",
+                    "required": True,
+                    "value": "medium",
+                    "options": [
+                        {"label": "Low (better quality)", "value": "low"},
+                        {"label": "Medium (balanced)", "value": "medium"},
+                        {"label": "High (smaller file)", "value": "high"},
+                    ],
+                },
+            ],
+            "related": ["unlock", "split", "merge"],
+            "tips": ["Medium is the best balance.", "High gives more reduction.", "Low preserves quality."],
+        },
+        {
+            "path": "pdf-to-word",
+            "title": "PDF to Word",
+            "icon_html": "📈",
+            "description": "Convert a PDF into an editable Word document.",
+            "post_route": "pdf_to_word_route",
+            "input_label": "PDF file",
+            "input_name": "pdf",
+            "accept": "application/pdf,.pdf",
+            "multiple": False,
+            "action_label": "Convert to Word",
+            "fields": [],
+            "related": ["office-to-pdf", "pdf-to-excel", "pdf-to-powerpoint"],
+            "tips": ["Use a file with clear text.", "The converted file will download automatically.", "Formatting is preserved where possible."],
+        },
+        {
+            "path": "pdf-to-powerpoint",
+            "title": "PDF to PowerPoint",
+            "icon_html": "📊",
+            "description": "Convert PDF pages into PowerPoint slides.",
+            "post_route": "pdf_to_powerpoint_route",
+            "input_label": "PDF file",
+            "input_name": "pdf",
+            "accept": "application/pdf,.pdf",
+            "multiple": False,
+            "action_label": "Convert to PowerPoint",
+            "fields": [],
+            "related": ["pdf-to-word", "office-to-pdf", "pdf-to-excel"],
+            "tips": ["One page becomes one slide.", "Best for simple layouts.", "Large files may take a moment."],
+        },
+        {
+            "path": "pdf-to-excel",
+            "title": "PDF to Excel",
+            "icon_htmml": "📈",
+            "description": "Extract tables from a PDF into an Excel workbook.",
+            "post_route": "pdf_to_excel_route",
+            "input_label": "PDF file",
+            "input_name": "pdf",
+            "accept": "application/pdf,.pdf",
+            "multiple": False,
+            "action_label": "Convert to Excel",
+            "fields": [],
+            "related": ["pdf-to-word", "office-to-pdf", "compress"],
+            "tips": ["Table-heavy PDFs work best.", "Review the workbook after export.", "Small tables convert cleanest."],
+        },
+        {
+            "path": "office-to-pdf",
+            "title": "Office to PDF",
+            "icon_html": "📄",
+            "description": "Convert Word, Excel or PowerPoint documents into PDF.",
+            "post_route": "office_to_pdf_route",
+            "input_label": "Document file",
+            "input_name": "document",
+            "accept": ".docx,.doc,.xlsx,.xls,.pptx,.ppt",
+            "multiple": False,
+            "action_label": "Convert to PDF",
+            "fields": [],
+            "related": ["pdf-to-word", "pdf-to-powerpoint", "pdf-to-excel"],
+            "tips": ["Use supported Office file formats.", "The PDF downloads automatically.", "Large presentations may take a few moments."],
+        },
+        {
+            "path": "qr-code",
+            "title": "Generate QR Code",
+            "icon_html": "🔲",
+            "description": "Create a QR code from a website URL and download it as a PNG.",
+            "post_route": "qr_code_route",
+            "has_file": False,
+            "fields": [
+                {"type": "url", "name": "url", "label": "Website URL", "placeholder": "https://example.com", "required": True},
+            ],
+            "action_label": "Generate QR Code",
+            "related": ["office-to-pdf", "pdf-to-word", "compress"],
+            "tips": ["Include the full URL so the QR code scans correctly.", "Use HTTPS links for best compatibility.", "Download the PNG and share it anywhere."],
+            "form_heading": "Generate a QR code",
+            "form_description": "Enter the website URL to create a downloadable QR code image.",
+        },
+        {
+            "path": "pdf-to-images",
+            "title": "PDF to Images",
+            "icon_html": "🖼️",
+            "description": "Convert PDF pages into JPG images and download as a ZIP.",
+            "post_route": "pdf_to_images_route",
+            "input_label": "PDF file",
+            "input_name": "pdf",
+            "accept": "application/pdf,.pdf",
+            "multiple": False,
+            "action_label": "Convert to Images",
+            "fields": [
+                {"type": "number", "name": "dpi", "label": "DPI (72–300)", "placeholder": "150", "required": True, "value": "150", "min": "72", "max": "300"},
+            ],
+            "related": ["images-to-pdf", "compress", "pdf-to-word"],
+            "tips": ["150 DPI is a good balance.", "High DPI produces larger images.", "Perfect for image previews."],
+        },
+        {
+            "path": "images-to-pdf",
+            "title": "Images to PDF",
+            "icon_html": "📷",
+            "description": "Combine multiple images into a single PDF file.",
+            "post_route": "images_to_pdf_route",
+            "input_label": "Image files",
+            "input_name": "images",
+            "accept": "image/*",
+            "multiple": True,
+            "action_label": "Create PDF",
+            "fields": [],
+            "related": ["pdf-to-images", "office-to-pdf", "merge"],
+            "tips": ["Upload JPG, PNG, GIF, or BMP files.", "Files are combined in selected order.", "Use images with consistent orientation."],
+        },
+        {
+            "path": "rotate",
+            "title": "Rotate PDF",
+            "icon_html": "🔄",
+            "description": "Rotate selected PDF pages by 90, 180, or 270 degrees.",
+            "post_route": "rotate_pdf",
+            "input_label": "PDF file",
+            "input_name": "pdf",
+            "accept": "application/pdf,.pdf",
+            "multiple": False,
+            "action_label": "Rotate PDF",
+            "fields": [
+                {"type": "text", "name": "page_ranges", "label": "Pages to rotate (optional)", "placeholder": "Example: 1-3,5", "required": False},
+                {
+                    "type": "select",
+                    "name": "angle",
+                    "label": "Angle",
+                    "required": True,
+                    "value": "90",
+                    "options": [
+                        {"label": "90°", "value": "90"},
+                        {"label": "180°", "value": "180"},
+                        {"label": "270°", "value": "270"},
+                    ],
+                },
+            ],
+            "related": ["split", "delete-pages", "compress"],
+            "tips": ["Choose 90 or 270 for portrait changes.", "Leave pages blank to rotate the whole document.", "Rotate before compressing for best results."],
+        },
+        {
+            "path": "delete-pages",
+            "title": "Delete Pages",
+            "icon_html": "🗑️",
+            "description": "Remove unwanted pages from your PDF in one step.",
+            "post_route": "delete_pdf_pages_route",
+            "input_label": "PDF file",
+            "input_name": "pdf",
+            "accept": "application/pdf,.pdf",
+            "multiple": False,
+            "action_label": "Delete Pages",
+            "fields": [
+                {"type": "text", "name": "page_ranges", "label": "Pages to remove", "placeholder": "Example: 1-3,5", "required": True},
+            ],
+            "related": ["split", "merge", "compress"],
+            "tips": ["Use commas and dashes for ranges.", "Double-check page numbers before submitting.", "The updated PDF downloads automatically."],
+        },
+    ]
+
+    tools_by_path = {tool["path"]: tool for tool in tools}
+    tool_paths = {tool["path"] for tool in tools}
+
+    def get_request_ip() -> str:
+        return request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
+
+    @app.before_request
+    def ensure_anonymous_id():
+        g.anonymous_id = request.cookies.get("anonymous_id")
+        if not g.anonymous_id:
+            g.anonymous_id = str(uuid4())
+        g.request_ip = get_request_ip()
+
+    @app.after_request
+    def persist_anonymous_id(response):
+        if hasattr(g, "anonymous_id") and request.cookies.get("anonymous_id") != g.anonymous_id:
+            response.set_cookie(
+                "anonymous_id",
+                g.anonymous_id,
+                max_age=60 * 60 * 24 * 365,
+                httponly=True,
+                samesite="Lax",
+            )
+        return response
 
     def wants_json() -> bool:
         return request.headers.get("X-Requested-With") == "fetch"
@@ -93,6 +366,73 @@ def create_app() -> Flask:
         if user_id is None:
             return None
         return get_user(app.config["DATABASE"], int(user_id))
+
+    def get_usage_limit() -> int:
+        user = current_user()
+        if user is None:
+            return int(get_setting(app.config["DATABASE"], "guest_weekly_limit", "5") or 5)
+        if user["is_admin"] or user["is_premium"]:
+            return 0
+        return int(get_setting(app.config["DATABASE"], "free_weekly_limit", "10") or 10)
+
+    def get_current_usage() -> int:
+        user = current_user()
+        if user:
+            return get_total_usage(app.config["DATABASE"], user_id=int(user["id"]))
+        return get_total_usage(app.config["DATABASE"], anonymous_id=g.anonymous_id, ip_address=g.request_ip)
+
+    def get_remaining_quota() -> int | None:
+        limit = get_usage_limit()
+        if limit <= 0:
+            return None
+        return max(0, limit - get_current_usage())
+
+    def get_quota_message() -> str:
+        limit = get_usage_limit()
+        if limit <= 0:
+            return "Unlimited conversions are available for your plan."
+
+        remaining = get_remaining_quota()
+        if remaining is None or remaining <= 0:
+            if current_user():
+                return "You have used all of your weekly conversions. Upgrade to Premium or contact support for more."
+            return "You have used all guest weekly conversions. Create a free account to continue."
+        return f"{remaining} free conversion{'s' if remaining != 1 else ''} remaining this week."
+
+    def track_tool_usage(tool_name: str) -> None:
+        user = current_user()
+        if user:
+            record_tool_usage(
+                app.config["DATABASE"],
+                tool_name,
+                user_id=int(user["id"]),
+                ip_address=g.request_ip,
+            )
+        else:
+            record_tool_usage(
+                app.config["DATABASE"],
+                tool_name,
+                anonymous_id=g.anonymous_id,
+                ip_address=g.request_ip,
+            )
+
+    @app.before_request
+    def enforce_usage_limit():
+        if request.method != "POST":
+            return None
+        path = request.path.lstrip("/")
+        if path not in tool_paths:
+            return None
+        limit = get_usage_limit()
+        if limit <= 0:
+            return None
+        total = get_current_usage()
+        if total >= limit:
+            if current_user():
+                message = "You have used all of your weekly conversions. Upgrade to Premium or contact support."
+            else:
+                message = "You have used all guest weekly conversions. Create a free account to continue."
+            return error_response(message, 429)
 
     def login_required(view):
         @wraps(view)
@@ -134,62 +474,160 @@ def create_app() -> Flask:
     def error_response(message: str, status_code: int):
         if wants_json():
             return jsonify({"error": message}), status_code
+        tool_path = request.path.lstrip("/")
+        if tool_path in tools_by_path:
+            return render_tool_page(tools_by_path[tool_path], error=message), status_code
         return render_template("index.html", error=message, user=current_user()), status_code
 
     def render_register(error: str = "", **values):
         return render_template("register.html", error=error, **values)
 
-    def render_verify_registration(error: str = ""):
-        pending = session.get("pending_registration") or {}
-        return render_template(
-            "verify_registration.html",
-            error=error,
-            email=pending.get("email", ""),
-        )
-
-    def otp_expiry() -> datetime:
-        return datetime.now(timezone.utc) + timedelta(
-            minutes=int(os.environ.get("REGISTRATION_OTP_EXPIRY_MINUTES", "10"))
-        )
-
-    def store_pending_otp(key: str, email: str, otp: str) -> None:
-        session[key] = {
-            "email": email.strip().lower(),
-            "otp_hash": generate_password_hash(otp),
-            "expires_at": otp_expiry().isoformat(),
-        }
-        session.permanent = True
-
-    def verify_pending_otp(key: str, otp: str) -> tuple[dict, str]:
-        pending = session.get(key)
-        if not pending:
-            return {}, "Verification session expired. Please request a new code."
-
-        expires_at = datetime.fromisoformat(pending["expires_at"])
-        if expires_at < datetime.now(timezone.utc):
-            session.pop(key, None)
-            return {}, "Verification code expired. Please request a new code."
-
-        if not check_password_hash(pending["otp_hash"], otp.strip()):
-            return pending, "Invalid verification code."
-
-        return pending, ""
-
     def render_admin(error: str = "", success: str = "", status_code: int = 200):
+        users = list_users(app.config["DATABASE"])
+        premium_users = sum(1 for account in users if account["is_premium"])
+        weekly_conversions = get_weekly_total_usage(app.config["DATABASE"])
         return render_template(
             "admin.html",
             user=current_user(),
-            users=list_users(app.config["DATABASE"]),
+            users=users,
             stats=admin_stats(app.config["DATABASE"]),
             audit_events=list_audit_events(app.config["DATABASE"], limit=75),
+            premium_users=premium_users,
+            weekly_conversions=weekly_conversions,
+            guest_weekly_limit=get_setting(app.config["DATABASE"], "guest_weekly_limit", "5"),
+            free_weekly_limit=get_setting(app.config["DATABASE"], "free_weekly_limit", "10"),
+            premium_weekly_limit=get_setting(app.config["DATABASE"], "premium_weekly_limit", "0"),
             error=error,
             success=success,
         ), status_code
 
+    def render_tool_page(tool: dict, error: str = "") -> str:
+        return render_template(
+            "tool.html",
+            tool=tool,
+            tools=tools,
+            tools_by_path=tools_by_path,
+            remaining_quota=get_remaining_quota(),
+            usage_limit=get_usage_limit(),
+            quota_message=get_quota_message(),
+            error=error,
+        )
+
     @app.get("/")
-    @login_required
     def index():
-        return render_template("index.html", user=current_user())
+        return render_template("home.html", tools=tools)
+
+    @app.get("/about")
+    def about():
+        return render_template(
+            "about.html",
+            tools=tools,
+        )
+
+    @app.get("/pricing")
+    def pricing():
+        return render_template(
+            "pricing.html",
+            tools=tools,
+        )
+
+    @app.get("/contact")
+    def contact():
+        return render_template(
+            "contact.html",
+            tools=tools,
+        )
+
+    @app.get("/privacy")
+    def privacy():
+        return render_template(
+            "page.html",
+            page={
+                "label": "Privacy",
+                "title": "Privacy Policy",
+                "description": "How SwiftPDF handles accounts, uploads, and recovery data.",
+                "content": (
+                    "<p>Uploaded files are processed temporarily and removed after downloads complete. "
+                    "Account passwords and security-question answers are stored only as hashes. "
+                    "Audit logs record operational events such as login, password reset, tool usage, and admin actions.</p>"
+                ),
+            },
+            tools=tools,
+        )
+
+    @app.get("/terms")
+    def terms():
+        return render_template(
+            "page.html",
+            page={
+                "label": "Terms",
+                "title": "Terms of Use",
+                "description": "Use SwiftPDF responsibly and only process files you are authorized to handle.",
+                "content": (
+                    "<p>SwiftPDF is provided for document processing workflows. Users are responsible for uploaded content, "
+                    "for respecting file ownership and access rights, and for keeping account credentials secure.</p>"
+                ),
+            },
+            tools=tools,
+        )
+
+    @app.get("/account")
+    def account():
+        user = current_user()
+        if user is None:
+            return redirect(url_for("login"))
+
+        usage = get_total_usage(app.config["DATABASE"], user_id=int(user["id"]))
+        remaining_quota = get_remaining_quota()
+        return render_template(
+            "profile.html",
+            user=user,
+            usage=usage,
+            remaining_quota=remaining_quota,
+            usage_limit=get_usage_limit(),
+            quota_message=get_quota_message(),
+            plan=user["role"].title(),
+            security_success="Security questions updated." if request.args.get("security_updated") else "",
+        )
+
+    @app.post("/account/security-questions")
+    @login_required
+    def update_security_questions():
+        user = current_user()
+        current_password = request.form.get("current_password", "")
+        date_of_birth = request.form.get("date_of_birth", "")
+        current_city = request.form.get("current_city", "")
+
+        try:
+            verify_user_password(app.config["DATABASE"], int(user["id"]), current_password)
+            set_user_security_questions(app.config["DATABASE"], int(user["id"]), date_of_birth, current_city)
+        except AuthError as exc:
+            usage = get_total_usage(app.config["DATABASE"], user_id=int(user["id"]))
+            log_audit("security_questions_update_failed", str(exc), int(user["id"]))
+            return render_template(
+                "profile.html",
+                user=current_user(),
+                usage=usage,
+                remaining_quota=get_remaining_quota(),
+                usage_limit=get_usage_limit(),
+                quota_message=get_quota_message(),
+                plan=user["role"].title(),
+                security_error=str(exc),
+            ), 400
+
+        log_audit("security_questions_updated", "User updated password recovery security answers.", int(user["id"]))
+        return redirect(url_for("account", security_updated="1"))
+
+    @app.get("/profile")
+    def profile():
+        return redirect(url_for("account"))
+
+    @app.get("/<tool_name>")
+    def tool_page(tool_name: str):
+        tool = tools_by_path.get(tool_name)
+        if tool is None:
+            return abort(404)
+        return render_tool_page(tool)
 
     @app.route("/register", methods=["GET", "POST"])
     def register():
@@ -201,82 +639,55 @@ def create_app() -> Flask:
         email = request.form.get("email", "")
         password = request.form.get("password", "")
         confirm_password = request.form.get("confirm_password", "")
+        date_of_birth = request.form.get("date_of_birth", "")
+        current_city = request.form.get("current_city", "")
+
+        def register_values() -> dict[str, str]:
+            return {
+                "first_name": first_name,
+                "last_name": last_name,
+                "email": email,
+                "date_of_birth": date_of_birth,
+                "current_city": current_city,
+            }
 
         if password != confirm_password:
             return render_register(
                 error="Passwords do not match.",
-                first_name=first_name,
-                last_name=last_name,
-                email=email,
+                **register_values(),
             ), 400
 
         try:
             validate_registration_details(app.config["DATABASE"], first_name, last_name, email.strip().lower(), password)
+            validate_security_answers(date_of_birth, current_city)
         except AuthError as exc:
             return render_register(
                 error=str(exc),
-                first_name=first_name,
-                last_name=last_name,
-                email=email,
+                **register_values(),
             ), 400
 
-        otp = generate_otp()
         try:
-            send_registration_otp(email.strip().lower(), otp)
-        except EmailOtpError as exc:
+            user_id = create_user(
+                app.config["DATABASE"],
+                first_name,
+                last_name,
+                email.strip().lower(),
+                password,
+            )
+            set_user_security_questions(app.config["DATABASE"], user_id, date_of_birth, current_city)
+        except AuthError as exc:
             return render_register(
                 error=str(exc),
-                first_name=first_name,
-                last_name=last_name,
-                email=email,
-            ), 500
-
-        session["pending_registration"] = {
-            "first_name": first_name,
-            "last_name": last_name,
-            "email": email.strip().lower(),
-            "password_hash": generate_password_hash(password),
-            "otp_hash": generate_password_hash(otp),
-            "expires_at": otp_expiry().isoformat(),
-        }
-        session.permanent = True
-        log_audit("registration_otp_sent", f"Sent registration OTP to {email.strip().lower()}.")
-        return redirect(url_for("verify_registration"))
-
-    @app.route("/register/verify", methods=["GET", "POST"])
-    def verify_registration():
-        pending = session.get("pending_registration")
-        if not pending:
-            return redirect(url_for("register"))
-
-        if request.method == "GET":
-            return render_verify_registration()
-
-        expires_at = datetime.fromisoformat(pending["expires_at"])
-        if expires_at < datetime.now(timezone.utc):
-            session.pop("pending_registration", None)
-            return render_register(error="Verification code expired. Please register again."), 400
-
-        otp = request.form.get("otp", "").strip()
-        if not check_password_hash(pending["otp_hash"], otp):
-            return render_verify_registration(error="Invalid verification code."), 400
+                **register_values(),
+            ), 400
 
         session.clear()
-        try:
-            user_id = create_verified_user(
-                app.config["DATABASE"],
-                pending["first_name"],
-                pending["last_name"],
-                pending["email"],
-                pending["password_hash"],
-            )
-        except AuthError as exc:
-            return render_register(error=str(exc), email=pending["email"]), 400
-
         session["user_id"] = user_id
         session.permanent = True
-        log_audit("register", f"Account registered for {pending['email']}.", user_id)
+        log_audit("register", f"Account registered for {email.strip().lower()}.", user_id)
         return redirect(url_for("index"))
+
+
 
     @app.route("/login", methods=["GET", "POST"])
     def login():
@@ -298,97 +709,97 @@ def create_app() -> Flask:
         log_audit("login", "User logged in.", int(user["id"]))
         return redirect(url_for("index"))
 
-    @app.route("/login/otp", methods=["GET", "POST"])
-    def login_otp():
-        if request.method == "GET":
-            return render_template("login_otp.html")
-
-        email = request.form.get("email", "").strip().lower()
-        account = get_user_by_email(app.config["DATABASE"], email)
-        if account is None:
-            return render_template("login_otp.html", error="Account not found.", email=email), 404
-
-        otp = generate_otp()
-        try:
-            send_login_otp(email, otp)
-        except EmailOtpError as exc:
-            return render_template("login_otp.html", error=str(exc), email=email), 500
-
-        store_pending_otp("pending_login_otp", email, otp)
-        log_audit("login_otp_sent", f"Sent login OTP to {email}.", int(account["id"]))
-        return redirect(url_for("verify_login_otp"))
-
-    @app.route("/login/otp/verify", methods=["GET", "POST"])
-    def verify_login_otp():
-        pending = session.get("pending_login_otp")
-        if not pending:
-            return redirect(url_for("login_otp"))
-
-        if request.method == "GET":
-            return render_template("verify_login_otp.html", email=pending["email"])
-
-        pending, error = verify_pending_otp("pending_login_otp", request.form.get("otp", ""))
-        if error:
-            return render_template("verify_login_otp.html", error=error, email=pending.get("email", "")), 400
-
-        session.clear()
-        try:
-            user = authenticate_user_by_otp(app.config["DATABASE"], pending["email"])
-        except AuthError as exc:
-            return render_template("login_otp.html", error=str(exc), email=pending["email"]), 400
-
-        session["user_id"] = user["id"]
-        session.permanent = True
-        log_audit("login_otp", "User logged in with OTP.", int(user["id"]))
-        return redirect(url_for("index"))
 
     @app.route("/forgot-password", methods=["GET", "POST"])
     def forgot_password():
         if request.method == "GET":
-            return render_template("forgot_password.html")
+            session.pop("pending_password_reset", None)
+            return render_template("forgot_password.html", step="account")
 
-        email = request.form.get("email", "").strip().lower()
-        account = get_user_by_email(app.config["DATABASE"], email)
-        if account is None:
-            return render_template("forgot_password.html", error="Account not found.", email=email), 404
+        step = request.form.get("step", "account")
 
-        otp = generate_otp()
-        try:
-            send_password_reset_otp(email, otp)
-        except EmailOtpError as exc:
-            return render_template("forgot_password.html", error=str(exc), email=email), 500
+        if step == "account":
+            email = request.form.get("email", "").strip().lower()
+            account = get_user_by_email(app.config["DATABASE"], email)
+            log_audit("password_reset_requested", f"Password reset requested for {email}.", int(account["id"]) if account else None)
+            if account is None:
+                return render_template("forgot_password.html", step="account", error="Account not found.", email=email), 404
+            if not account.get("security_questions_configured"):
+                return render_template(
+                    "forgot_password.html",
+                    step="account",
+                    error="Security questions are not configured for this account. Contact an administrator or update Account Settings after login.",
+                    email=email,
+                ), 400
 
-        store_pending_otp("pending_password_reset", email, otp)
-        log_audit("password_reset_otp_sent", f"Sent password reset OTP to {email}.", int(account["id"]))
-        return redirect(url_for("reset_password"))
+            session["pending_password_reset"] = {
+                "user_id": int(account["id"]),
+                "email": str(account["email"]),
+                "answers_verified": False,
+            }
+            return render_template("forgot_password.html", step="questions", email=account["email"])
 
-    @app.route("/reset-password", methods=["GET", "POST"])
-    def reset_password():
         pending = session.get("pending_password_reset")
         if not pending:
             return redirect(url_for("forgot_password"))
 
-        if request.method == "GET":
-            return render_template("reset_password.html", email=pending["email"])
+        if step == "questions":
+            date_of_birth = request.form.get("date_of_birth", "")
+            current_city = request.form.get("current_city", "")
+            try:
+                verify_user_security_answers(
+                    app.config["DATABASE"],
+                    int(pending["user_id"]),
+                    date_of_birth,
+                    current_city,
+                )
+            except AuthError as exc:
+                log_audit("password_reset_failed", str(exc), int(pending["user_id"]))
+                return render_template(
+                    "forgot_password.html",
+                    step="questions",
+                    error=str(exc),
+                    email=pending["email"],
+                    date_of_birth=date_of_birth,
+                    current_city=current_city,
+                ), 400
 
-        pending, error = verify_pending_otp("pending_password_reset", request.form.get("otp", ""))
-        password = request.form.get("password", "")
-        confirm_password = request.form.get("confirm_password", "")
-        if error:
-            return render_template("reset_password.html", error=error, email=pending.get("email", "")), 400
+            pending["answers_verified"] = True
+            session["pending_password_reset"] = pending
+            return render_template("forgot_password.html", step="reset", email=pending["email"])
 
-        if password != confirm_password:
-            return render_template("reset_password.html", error="Passwords do not match.", email=pending["email"]), 400
+        if step == "reset":
+            if not pending.get("answers_verified"):
+                return redirect(url_for("forgot_password"))
+            password = request.form.get("password", "")
+            confirm_password = request.form.get("confirm_password", "")
+            if password != confirm_password:
+                return render_template(
+                    "forgot_password.html",
+                    step="reset",
+                    error="Passwords do not match.",
+                    email=pending["email"],
+                ), 400
 
-        try:
-            update_user_password(app.config["DATABASE"], pending["email"], password)
-        except AuthError as exc:
-            return render_template("reset_password.html", error=str(exc), email=pending["email"]), 400
+            try:
+                update_user_password(app.config["DATABASE"], str(pending["email"]), password)
+            except AuthError as exc:
+                return render_template(
+                    "forgot_password.html",
+                    step="reset",
+                    error=str(exc),
+                    email=pending["email"],
+                ), 400
 
-        session.pop("pending_password_reset", None)
-        account = get_user_by_email(app.config["DATABASE"], pending["email"])
-        log_audit("password_reset", f"Password reset completed for {pending['email']}.", int(account["id"]) if account else None)
-        return render_template("login.html", status="Password reset complete. You can log in now.", email=pending["email"])
+            log_audit("password_reset_success", f"Password reset completed for {pending['email']}.", int(pending["user_id"]))
+            session.clear()
+            return render_template("login.html", status="Password reset complete. Please log in with your new password.", email=pending["email"])
+
+        return redirect(url_for("forgot_password"))
+
+
+
+
 
     @app.post("/logout")
     def logout():
@@ -403,6 +814,27 @@ def create_app() -> Flask:
     def admin_dashboard():
         return render_admin()
 
+    # Debug route to inspect current session and computed user (temporary)
+    @app.get("/__whoami")
+    def debug_whoami():
+        u = current_user()
+        resp = {
+            "session_keys": list(session.keys()),
+            "session_user_id": session.get("user_id"),
+            "user": u,
+        }
+        return jsonify(resp)
+
+    def normalize_admin_role(role: str) -> str:
+        role_value = role.strip().lower()
+        if role_value in ("user", "free"):
+            return "FREE"
+        if role_value == "premium":
+            return "PREMIUM"
+        if role_value == "admin":
+            return "ADMIN"
+        return "FREE"
+
     @app.post("/admin/users")
     @admin_required
     def admin_create_user():
@@ -410,27 +842,36 @@ def create_app() -> Flask:
         last_name = request.form.get("last_name", "")
         email = request.form.get("email", "")
         password = request.form.get("password", "")
-        role = request.form.get("role", "user")
+        role = normalize_admin_role(request.form.get("role", "user"))
 
         try:
-            user_id = create_user_with_role(app.config["DATABASE"], first_name, last_name, email, password, role)
+            user_id = create_user_with_role(
+                app.config["DATABASE"],
+                first_name,
+                last_name,
+                email,
+                password,
+                role,
+                request.form.get("premium_valid_from", ""),
+                request.form.get("premium_valid_until", ""),
+            )
         except AuthError as exc:
             return render_admin(error=str(exc), status_code=400)
 
         log_audit("admin_create_user", f"Created user id {user_id} ({email}) with role {role}.")
-        return redirect(url_for("admin_dashboard"))
+        return render_admin(success="User added successfully")
 
     @app.post("/admin/users/<int:user_id>")
     @admin_required
     def admin_update_user(user_id: int):
         active_user = current_user()
-        role = request.form.get("role", "user")
+        role = normalize_admin_role(request.form.get("role", "user"))
 
-        if int(active_user["id"]) == user_id and role != "admin":
+        if int(active_user["id"]) == user_id and role != "ADMIN":
             log_audit("admin_role_change_blocked", "Admin attempted to remove own admin role.")
             return render_admin(error="You cannot remove your own admin role.", status_code=400)
 
-        if role != "admin" and admin_stats(app.config["DATABASE"])["admins"] <= 1:
+        if role != "ADMIN" and admin_stats(app.config["DATABASE"])["admins"] <= 1:
             existing_user = get_user(app.config["DATABASE"], user_id)
             if existing_user and existing_user["is_admin"]:
                 return render_admin(error="At least one admin account is required.", status_code=400)
@@ -443,13 +884,45 @@ def create_app() -> Flask:
                 request.form.get("last_name", ""),
                 request.form.get("email", ""),
                 role,
+                request.form.get("status", "ACTIVE"),
                 request.form.get("password", ""),
+                request.form.get("premium_valid_from", ""),
+                request.form.get("premium_valid_until", ""),
+                request.form.get("clear_premium_validity") == "on",
             )
         except AuthError as exc:
             return render_admin(error=str(exc), status_code=400)
 
         log_audit("admin_update_user", f"Updated user id {user_id}.")
-        return redirect(url_for("admin_dashboard"))
+        return render_admin(success="User updated successfully")
+
+    @app.post("/admin/settings")
+    @admin_required
+    def admin_update_settings():
+        guest_limit = request.form.get("guest_weekly_limit", "5").strip() or "0"
+        free_limit = request.form.get("free_weekly_limit", "10").strip() or "0"
+        premium_limit = request.form.get("premium_weekly_limit", "0").strip() or "0"
+        reset_quota = request.form.get("reset_quota") == "on"
+
+        try:
+            int(guest_limit)
+            int(free_limit)
+            int(premium_limit)
+        except ValueError:
+            return render_admin(error="Weekly limits must be integers." , status_code=400)
+
+        set_setting(app.config["DATABASE"], "guest_weekly_limit", guest_limit)
+        set_setting(app.config["DATABASE"], "free_weekly_limit", free_limit)
+        set_setting(app.config["DATABASE"], "premium_weekly_limit", premium_limit)
+
+        if reset_quota:
+            reset_all_weekly_usage(app.config["DATABASE"])
+            success = "Weekly quotas updated and reset."
+        else:
+            success = "Weekly quotas updated."
+
+        log_audit("admin_update_settings", f"Updated weekly quota settings.")
+        return render_admin(success=success)
 
     @app.post("/admin/users/<int:user_id>/delete")
     @admin_required
@@ -457,14 +930,14 @@ def create_app() -> Flask:
         active_user = current_user()
         if int(active_user["id"]) == user_id:
             log_audit("admin_delete_blocked", "Admin attempted to delete own account.")
-            return render_admin(error="You cannot delete your own account.", status_code=400)
+            return render_admin(error="You cannot delete your own administrator account.", status_code=400)
 
         account = get_user(app.config["DATABASE"], user_id)
         if account is None:
             return render_admin(error="User not found.", status_code=404)
 
         if account["is_admin"] and admin_stats(app.config["DATABASE"])["admins"] <= 1:
-            return render_admin(error="At least one admin account is required.", status_code=400)
+            return render_admin(error="At least one active administrator account must remain.", status_code=400)
 
         email = str(account["email"])
         delete_user(app.config["DATABASE"], user_id)
@@ -481,12 +954,12 @@ def create_app() -> Flask:
     @app.post("/admin/users/<int:user_id>/role")
     @admin_required
     def admin_set_user_role(user_id: int):
-        role = request.form.get("role", "user")
-        if int(current_user()["id"]) == user_id and role != "admin":
+        role = normalize_admin_role(request.form.get("role", "user"))
+        if int(current_user()["id"]) == user_id and role != "ADMIN":
             log_audit("admin_role_change_blocked", "Admin attempted to remove own admin role.")
             return redirect(url_for("admin_dashboard"))
 
-        if role != "admin" and admin_stats(app.config["DATABASE"])["admins"] <= 1:
+        if role != "ADMIN" and admin_stats(app.config["DATABASE"])["admins"] <= 1:
             existing_user = get_user(app.config["DATABASE"], user_id)
             if existing_user and existing_user["is_admin"]:
                 return redirect(url_for("admin_dashboard"))
@@ -500,7 +973,6 @@ def create_app() -> Flask:
         return redirect(url_for("admin_dashboard"))
 
     @app.post("/unlock")
-    @login_required
     def unlock():
         uploaded_file = request.files.get("pdf")
         password = request.form.get("password", "")
@@ -524,6 +996,7 @@ def create_app() -> Flask:
             shutil.rmtree(work_dir, ignore_errors=True)
             return error_response(str(exc), 400)
         log_audit("tool_unlock", f"Unlocked {filename}.")
+        track_tool_usage("unlock")
 
         @after_this_request
         def cleanup(response):
@@ -533,7 +1006,6 @@ def create_app() -> Flask:
         return send_file(output_path, as_attachment=True, download_name=output_name)
 
     @app.post("/split")
-    @login_required
     def split():
         uploaded_file = request.files.get("pdf")
         page_ranges = request.form.get("page_ranges", "")
@@ -557,6 +1029,7 @@ def create_app() -> Flask:
             shutil.rmtree(work_dir, ignore_errors=True)
             return error_response(str(exc), 400)
         log_audit("tool_split", f"Split {filename} with pages {page_ranges}.")
+        track_tool_usage("split")
 
         @after_this_request
         def cleanup(response):
@@ -566,7 +1039,6 @@ def create_app() -> Flask:
         return send_file(output_path, as_attachment=True, download_name=output_name)
 
     @app.post("/merge")
-    @login_required
     def merge():
         uploaded_files = request.files.getlist("pdfs")
         
@@ -599,6 +1071,7 @@ def create_app() -> Flask:
             
             merge_pdfs(input_paths, output_path, overwrite=True)
             log_audit("tool_merge", f"Merged {len(input_paths)} PDF file(s).")
+            track_tool_usage("merge")
         except PdfMergeError as exc:
             shutil.rmtree(work_dir, ignore_errors=True)
             return error_response(str(exc), 400)
@@ -614,7 +1087,6 @@ def create_app() -> Flask:
         return send_file(output_path, as_attachment=True, download_name=output_name)
 
     @app.post("/compress")
-    @login_required
     def compress():
         uploaded_file = request.files.get("pdf")
         level = request.form.get("level", "medium")
@@ -641,7 +1113,7 @@ def create_app() -> Flask:
             shutil.rmtree(work_dir, ignore_errors=True)
             return error_response(str(exc), 400)
         log_audit("tool_compress", f"Compressed {filename} at {level} level.")
-        
+        track_tool_usage("compress")
         @after_this_request
         def cleanup(response):
             response.call_on_close(lambda: shutil.rmtree(work_dir, ignore_errors=True))
@@ -650,7 +1122,6 @@ def create_app() -> Flask:
         return send_file(output_path, as_attachment=True, download_name=output_name)
 
     @app.post("/pdf-to-images")
-    @login_required
     def pdf_to_images_route():
         uploaded_file = request.files.get("pdf")
         dpi = request.form.get("dpi", "150")
@@ -684,6 +1155,7 @@ def create_app() -> Flask:
             
             output_name = f"{Path(filename).stem}-images.zip"
             log_audit("tool_pdf_to_images", f"Converted {filename} to images at {dpi} DPI.")
+            track_tool_usage("pdf-to-images")
         except ImageConversionError as exc:
             shutil.rmtree(work_dir, ignore_errors=True)
             return error_response(str(exc), 400)
@@ -696,7 +1168,6 @@ def create_app() -> Flask:
         return send_file(zip_path, as_attachment=True, download_name=output_name)
 
     @app.post("/images-to-pdf")
-    @login_required
     def images_to_pdf_route():
         uploaded_files = request.files.getlist("images")
         
@@ -729,6 +1200,7 @@ def create_app() -> Flask:
             
             images_to_pdf(input_paths, output_path, overwrite=True)
             log_audit("tool_images_to_pdf", f"Created PDF from {len(input_paths)} image file(s).")
+            track_tool_usage("images-to-pdf")
         except ImageConversionError as exc:
             shutil.rmtree(work_dir, ignore_errors=True)
             return error_response(str(exc), 400)
@@ -741,7 +1213,6 @@ def create_app() -> Flask:
         return send_file(output_path, as_attachment=True, download_name=output_name)
 
     @app.post("/pdf-to-word")
-    @login_required
     def pdf_to_word_route():
         uploaded_file = request.files.get("pdf")
         
@@ -764,7 +1235,7 @@ def create_app() -> Flask:
             shutil.rmtree(work_dir, ignore_errors=True)
             return error_response(str(exc), 400)
         log_audit("tool_pdf_to_word", f"Converted {filename} to Word.")
-        
+        track_tool_usage("pdf-to-word")
         @after_this_request
         def cleanup(response):
             response.call_on_close(lambda: shutil.rmtree(work_dir, ignore_errors=True))
@@ -773,7 +1244,6 @@ def create_app() -> Flask:
         return send_file(output_path, as_attachment=True, download_name=output_name)
 
     @app.post("/pdf-to-powerpoint")
-    @login_required
     def pdf_to_powerpoint_route():
         uploaded_file = request.files.get("pdf")
         
@@ -796,7 +1266,7 @@ def create_app() -> Flask:
             shutil.rmtree(work_dir, ignore_errors=True)
             return error_response(str(exc), 400)
         log_audit("tool_pdf_to_powerpoint", f"Converted {filename} to PowerPoint.")
-        
+        track_tool_usage("pdf-to-powerpoint")
         @after_this_request
         def cleanup(response):
             response.call_on_close(lambda: shutil.rmtree(work_dir, ignore_errors=True))
@@ -805,7 +1275,6 @@ def create_app() -> Flask:
         return send_file(output_path, as_attachment=True, download_name=output_name)
 
     @app.post("/pdf-to-excel")
-    @login_required
     def pdf_to_excel_route():
         uploaded_file = request.files.get("pdf")
         
@@ -828,7 +1297,7 @@ def create_app() -> Flask:
             shutil.rmtree(work_dir, ignore_errors=True)
             return error_response(str(exc), 400)
         log_audit("tool_pdf_to_excel", f"Converted {filename} to Excel.")
-        
+        track_tool_usage("pdf-to-excel")
         @after_this_request
         def cleanup(response):
             response.call_on_close(lambda: shutil.rmtree(work_dir, ignore_errors=True))
@@ -837,7 +1306,6 @@ def create_app() -> Flask:
         return send_file(output_path, as_attachment=True, download_name=output_name)
 
     @app.post("/office-to-pdf")
-    @login_required
     def office_to_pdf_route():
         uploaded_file = request.files.get("document")
         
@@ -861,7 +1329,7 @@ def create_app() -> Flask:
             shutil.rmtree(work_dir, ignore_errors=True)
             return error_response(str(exc), 400)
         log_audit("tool_office_to_pdf", f"Converted {filename} to PDF.")
-        
+        track_tool_usage("office-to-pdf")
         @after_this_request
         def cleanup(response):
             response.call_on_close(lambda: shutil.rmtree(work_dir, ignore_errors=True))
@@ -869,8 +1337,42 @@ def create_app() -> Flask:
         
         return send_file(output_path, as_attachment=True, download_name=output_name)
 
+    @app.post("/qr-code")
+    def qr_code_route():
+        url_value = request.form.get("url", "").strip()
+        if not url_value:
+            return error_response("Enter a website URL to generate a QR code.", 400)
+
+        normalized_url = url_value
+        parsed_url = urlparse(normalized_url)
+        if not parsed_url.scheme:
+            normalized_url = f"https://{normalized_url}"
+            parsed_url = urlparse(normalized_url)
+
+        if not parsed_url.netloc:
+            return error_response("Enter a valid website URL.", 400)
+
+        work_dir = Path(tempfile.mkdtemp(prefix="swiftpdf-qr-"))
+        output_name = "qr-code.png"
+        output_path = work_dir / output_name
+
+        try:
+            generate_qr_code(normalized_url, output_path, overwrite=True)
+        except QrCodeError as exc:
+            shutil.rmtree(work_dir, ignore_errors=True)
+            return error_response(str(exc), 400)
+
+        log_audit("tool_qr_code", f"Generated QR code for {normalized_url}.")
+        track_tool_usage("qr-code")
+
+        @after_this_request
+        def cleanup(response):
+            response.call_on_close(lambda: shutil.rmtree(work_dir, ignore_errors=True))
+            return response
+
+        return send_file(output_path, as_attachment=True, download_name=output_name)
+
     @app.post("/rotate-pdf")
-    @login_required
     def rotate_pdf():
         uploaded_file = request.files.get("pdf")
         page_ranges = request.form.get("page_ranges", "")
@@ -900,7 +1402,7 @@ def create_app() -> Flask:
             shutil.rmtree(work_dir, ignore_errors=True)
             return error_response(str(exc), 400)
         log_audit("tool_rotate_pdf", f"Rotated {filename} by {angle} degrees.")
-        
+        track_tool_usage("rotate-pdf")
         @after_this_request
         def cleanup(response):
             response.call_on_close(lambda: shutil.rmtree(work_dir, ignore_errors=True))
@@ -909,7 +1411,6 @@ def create_app() -> Flask:
         return send_file(output_path, as_attachment=True, download_name=output_name)
 
     @app.post("/delete-pdf-pages")
-    @login_required
     def delete_pdf_pages_route():
         uploaded_file = request.files.get("pdf")
         page_ranges = request.form.get("page_ranges", "")
@@ -933,7 +1434,7 @@ def create_app() -> Flask:
             shutil.rmtree(work_dir, ignore_errors=True)
             return error_response(str(exc), 400)
         log_audit("tool_delete_pages", f"Deleted pages {page_ranges} from {filename}.")
-        
+        track_tool_usage("delete-pdf-pages")
         @after_this_request
         def cleanup(response):
             response.call_on_close(lambda: shutil.rmtree(work_dir, ignore_errors=True))

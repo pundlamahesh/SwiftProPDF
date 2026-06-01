@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}SwiftPDF — All your PDF tools in one place{% endblock %}</title>
+    <meta name="description" content="{% block meta_description %}A modern PDF toolkit for fast, secure conversions, editing, and file processing without mandatory login.{% endblock %}">
+    <meta property="og:title" content="{% block og_title %}SwiftPDF — All your PDF tools in one place{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}A modern PDF toolkit for fast, secure conversions, editing, and file processing without mandatory login.{% endblock %}">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="{{ request.url }}">
+    <meta property="og:image" content="{{ url_for('static', filename='logo.svg', _external=True) }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="theme-light">
+    <div class="site-shell">
+        <header class="site-header">
+            <div class="header-inner">
+                <a class="brand" href="{{ url_for('index') }}">
+                    <img class="brand-mark" src="{{ url_for('static', filename='logo.svg') }}" alt="SwiftPDF logo">
+                    <span class="brand-name">SwiftPDF</span>
+                </a>
+
+                <nav class="primary-nav" aria-label="Primary navigation">
+                    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="primary-menu">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </button>
+
+                    <div class="nav-menu" id="primary-menu">
+                        <a href="{{ url_for('index') }}">Home</a>
+                        <div class="dropdown">
+                            <button class="dropdown-toggle" type="button" aria-expanded="false">All Tools</button>
+                            <div class="dropdown-menu">
+                                {% for tool in tools|default([]) %}
+                                <a href="{{ url_for('tool_page', tool_name=tool.path) }}">{{ tool.title }}</a>
+                                {% endfor %}
+                                <div class="dropdown-divider"></div>
+                                <a href="{{ url_for('index') }}#tools-grid">Browse all tools</a>
+                            </div>
+                        </div>
+                        <a href="{{ url_for('pricing') }}">Pricing</a>
+                        <a href="{{ url_for('about') }}">About</a>
+                        <a href="{{ url_for('contact') }}">Contact</a>
+                    </div>
+                </nav>
+
+                <div class="header-actions">
+                    {% if user %}
+                    {% if user.is_admin %}
+                    <a href="{{ url_for('admin_dashboard') }}" class="ghost-button admin-top-link">Admin</a>
+                    {% endif %}
+                    <span class="user-pill">Welcome {{ user.full_name }}</span>
+                    <a href="{{ url_for('account') }}" class="ghost-button">Account</a>
+                    <form action="{{ url_for('logout') }}" method="post" class="inline-form">
+                        <button class="ghost-button" type="submit">Logout</button>
+                    </form>
+                    {% else %}
+                    <a href="{{ url_for('login') }}" class="ghost-button">Login</a>
+                    <a href="{{ url_for('register') }}" class="cta-button">Sign Up</a>
+                    {% endif %}
+                    <button class="theme-toggle" type="button" aria-label="Toggle dark mode">🌙</button>
+                </div>
+            </div>
+        </header>
+
+        <main class="page-content">
+            {% block content %}{% endblock %}
+        </main>
+
+        <footer class="site-footer">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <img src="{{ url_for('static', filename='logo.svg') }}" alt="SwiftPDF logo" class="footer-logo">
+                    <div>
+                        <p class="footer-copy">Fast PDF tools, easy access, no compulsory sign-in.</p>
+                    </div>
+                </div>
+                <div class="footer-links">
+                    <a href="{{ url_for('about') }}">About</a>
+                    <a href="{{ url_for('pricing') }}">Pricing</a>
+                    <a href="{{ url_for('contact') }}">Contact</a>
+                    <a href="{{ url_for('privacy') }}">Privacy Policy</a>
+                    <a href="{{ url_for('terms') }}">Terms</a>
+                </div>
+            </div>
+            <div class="footer-note">© {{ current_year }} SwiftPDF. Built for fast and private PDF workflows.</div>
+        </footer>
+    </div>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

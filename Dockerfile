@@ -32,9 +32,9 @@ COPY --chown=swiftpdf:swiftpdf . .
 RUN pip install --upgrade pip setuptools wheel && \
     pip install -e .
 
-# Create necessary directories
-RUN mkdir -p /app/logs /app/instance /tmp/swiftpdf && \
-    chown -R swiftpdf:swiftpdf /app/logs /app/instance /tmp/swiftpdf
+# Create runtime directories. The Flask app stores SQLite data under the package instance path.
+RUN mkdir -p /app/src/SwiftPDF/instance /tmp/swiftpdf && \
+    chown -R swiftpdf:swiftpdf /app/src/SwiftPDF/instance /tmp/swiftpdf
 
 # Switch to non-root user
 USER swiftpdf

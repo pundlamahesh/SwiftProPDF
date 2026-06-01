@@ -14,7 +14,7 @@
                     <img src="{{ url_for('static', filename='logo.svg') }}" alt="SwiftPDF" class="logo">
                     <span>SwiftPDF</span>
                 </div>
-                <div class="nav-actions">
+                <div class="nav-actions topbar">
                     <div class="tools-menu" aria-label="View all tools">
                         <button class="tools-menu-trigger" type="button" aria-expanded="false" aria-controls="all-tools-menu">
                             <span class="tools-menu-icon" aria-hidden="true">
@@ -42,13 +42,20 @@
                             <a class="tools-menu-item" role="menuitem" href="#delete-pdf-pages" data-tool-target="delete-pdf-pages">Delete Pages</a>
                         </div>
                     </div>
-                    {% if user.is_admin %}
-                    <a class="tools-menu-trigger admin-top-link" href="{{ url_for('admin_dashboard') }}">Admin</a>
+                    {% if user %}
+                        {% if user.is_admin %}
+                        <div class="header-admin-actions">
+                            <a class="admin-top-link" href="{{ url_for('admin_dashboard') }}" aria-label="Open admin dashboard">Admin</a>
+                        </div>
+                        {% endif %}
+                        <span class="user-pill">Welcome {{ user.full_name }}</span>
+                        <form action="{{ url_for('logout') }}" method="post" class="inline-form">
+                            <button class="nav-button" type="submit">Logout</button>
+                        </form>
+                    {% else %}
+                        <a class="ghost-button" href="{{ url_for('login') }}">Login</a>
+                        <a class="cta-button" href="{{ url_for('register') }}">Register</a>
                     {% endif %}
-                    <span class="user-pill">Welcome {{ user.full_name }}</span>
-                    <form action="{{ url_for('logout') }}" method="post">
-                        <button class="nav-button" type="submit">Logout</button>
-                    </form>
                 </div>
             </nav>
 

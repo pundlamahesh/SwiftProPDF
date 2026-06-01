@@ -1,27 +1,28 @@
-function setStatus(statusBox, message, type) {
-    if (!statusBox) {
-        return;
-    }
+﻿let selectedHomepageFile = null;
+const navToggle = document.querySelector('.nav-toggle');
+const navMenu = document.querySelector('.nav-menu');
+const themeToggle = document.querySelector('.theme-toggle');
 
+function setStatus(statusBox, message, type) {
+    if (!statusBox) return;
     statusBox.hidden = false;
     statusBox.textContent = message;
-    statusBox.className = type === "error" ? "alert" : "status";
+    statusBox.className = type === 'error' ? 'alert' : 'status';
 }
 
 function getDownloadName(response) {
-    const fallback = "download.pdf";
-    const disposition = response.headers.get("Content-Disposition");
+    const fallback = 'download.pdf';
+    const disposition = response.headers.get('Content-Disposition');
     if (!disposition) {
         return fallback;
     }
-
-    const match = disposition.match(/filename="?([^"]+)"?/i);
+    const match = disposition.match(/filename="?([^";]+)"?/i);
     return match ? match[1] : fallback;
 }
 
 function downloadBlob(blob, filename) {
     const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
+    const link = document.createElement('a');
     link.href = url;
     link.download = filename;
     document.body.appendChild(link);
@@ -30,132 +31,571 @@ function downloadBlob(blob, filename) {
     URL.revokeObjectURL(url);
 }
 
+function clearFilePreviews(form) {
+
+    form = form || document;
+
+    form.querySelectorAll('.selected-file-name').forEach((el) => {
+        el.remove();
+    });
+
+    form.querySelectorAll('.upload-selection-badge').forEach((el) => {
+        el.textContent = '';
+        el.classList.remove('has-file');
+    });
+
+    form.querySelectorAll('input[type="file"]').forEach((input) => {
+        input.value = '';
+    });
+
+    if (typeof selectedHomepageFile !== 'undefined') {
+        selectedHomepageFile = null;
+    }
+}
+
 async function readError(response) {
     try {
-        const data = await response.json();
-        return data.error || "Could not process the PDF.";
+        const payload = await response.json();
+        return payload?.error || 'Could not process the file.';
     } catch {
-        return "Could not process the PDF.";
+        return 'Could not process the file.';
     }
 }
 
 function setupDownloadForm(form) {
-    form.addEventListener("submit", async (event) => {
-        event.preventDefault();
+    const statusBox = form.querySelector('.form-status');
+    const button = form.querySelector('button[type="submit"]');
+    const originalLabel = button?.textContent || 'Submit';
 
-        const formCard = form.closest(".form-card");
-        const statusBox = formCard ? formCard.querySelector("[data-status]") : null;
-        const button = form.querySelector("button[type='submit']");
-        const originalButtonText = button.textContent;
-        const actionLabel = form.dataset.actionLabel || "Processing your PDF...";
-        const successLabel = form.dataset.successLabel || "PDF downloaded. Form cleared.";
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (!button) return;
 
         button.disabled = true;
-        button.textContent = "Working...";
-        setStatus(statusBox, actionLabel, "status");
+        button.textContent = 'Processing...';
+        setStatus(statusBox, 'Preparing your download…', 'status');
 
         try {
             const response = await fetch(form.action, {
-                method: "POST",
+                method: 'POST',
                 body: new FormData(form),
                 headers: {
-                    "X-Requested-With": "fetch",
+                    'X-Requested-With': 'fetch',
                 },
             });
 
             if (!response.ok) {
-                setStatus(statusBox, await readError(response), "error");
+                setStatus(statusBox, await readError(response), 'error');
                 return;
             }
 
             const filename = getDownloadName(response);
-            form.reset();
-
             const blob = await response.blob();
             downloadBlob(blob, filename);
             form.reset();
-            setStatus(statusBox, successLabel, "status");
-        } catch {
-            setStatus(statusBox, "Something went wrong while processing the PDF.", "error");
+            clearFilePreviews(form);
+            setStatus(statusBox, 'Your file is ready to download.', 'status');
+        } catch (error) {
+            setStatus(statusBox, 'Something went wrong while processing the file.', 'error');
+             clearFilePreviews(form);
         } finally {
             button.disabled = false;
-            button.textContent = originalButtonText;
+            button.textContent = originalLabel;
         }
     });
 }
 
-document.querySelectorAll("[data-unlock-form], [data-download-form]").forEach(setupDownloadForm);
+function bindDropzone(dropzone) {
+    const fileInput = dropzone.querySelector('input[type="file"]');
+    const label = dropzone.querySelector('.upload-title');
+    const details = dropzone.querySelector('.upload-text');
+    const selectionBadge = dropzone.querySelector('.upload-selection-badge');
+    const button = dropzone.querySelector('button');
 
-function showTool(toolName) {
-    document.querySelectorAll("[data-tool-panel]").forEach((panel) => {
-        panel.hidden = panel.dataset.toolPanel !== toolName;
+    function updateSelection(files) {
+        console.log("Files selected:", files);
+        const count = files.length;
+
+
+        if (label) {
+            label.textContent = count > 0
+                ? `${count} file${count > 1 ? 's' : ''} selected`
+                : 'Drop files anywhere or click to choose';
+        }
+
+        if (details) {
+            details.textContent = count > 0
+                ? 'Ready to process your file.'
+                : 'Preview and route to the right PDF tool in seconds.';
+        }
+
+        if (selectionBadge) {
+            if (count > 0) {
+                const file = files[0];
+                selectionBadge.textContent =
+                    `📄 ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+            } else {
+                selectionBadge.textContent = '';
+            }
+        }
+        if (count > 0) {
+    selectedHomepageFile = files[0];
+
+    document.getElementById('quick-actions')?.removeAttribute('hidden');
+    }
+    }
+
+    fileInput?.addEventListener('change', () => {
+        updateSelection(fileInput.files);
     });
 
-    document.querySelectorAll("[data-tool-target]").forEach((trigger) => {
-        const isActive = trigger.dataset.toolTarget === toolName;
-        trigger.classList.toggle("active", isActive);
-        if (isActive) {
-            trigger.setAttribute("aria-current", "true");
-        } else {
-            trigger.removeAttribute("aria-current");
+    const openFilePicker = () => fileInput?.click();
+
+    button?.addEventListener('click', (event) => {
+        event.preventDefault();
+        openFilePicker();
+    });
+
+    dropzone.addEventListener('dragenter', (event) => {
+        event.preventDefault();
+        dropzone.classList.add('drag-over');
+    });
+
+    dropzone.addEventListener('dragover', (event) => {
+        event.preventDefault();
+        dropzone.classList.add('drag-over');
+    });
+
+    dropzone.addEventListener('dragleave', () => {
+        dropzone.classList.remove('drag-over');
+    });
+
+    dropzone.addEventListener('drop', (event) => {
+        event.preventDefault();
+        dropzone.classList.remove('drag-over');
+
+        const droppedFiles = event.dataTransfer?.files;
+
+        if (droppedFiles?.length && fileInput) {
+            fileInput.files = droppedFiles;
+            updateSelection(droppedFiles);
+        }
+    });
+}
+    
+function initNav() {
+    if (!navToggle || !navMenu) return;
+    navToggle.addEventListener('click', () => {
+        navMenu.classList.toggle('open');
+    });
+    document.addEventListener('click', (event) => {
+        if (!navMenu.contains(event.target) && !navToggle.contains(event.target)) {
+            navMenu.classList.remove('open');
         }
     });
 }
 
-const toolsMenu = document.querySelector(".tools-menu");
-const toolsMenuTrigger = toolsMenu?.querySelector(".tools-menu-trigger");
+function initDropdowns() {
+    const toggles = document.querySelectorAll('.dropdown-toggle');
 
-function closeToolsMenu() {
-    if (!toolsMenu || !toolsMenuTrigger) {
-        return;
-    }
+    document.addEventListener('click', (event) => {
+        const toggle = event.target.closest('.dropdown-toggle');
+        if (toggle) {
+            const dropdown = toggle.closest('.dropdown');
+            if (!dropdown) return;
+            const isOpen = toggle.getAttribute('aria-expanded') === 'true';
+            const shouldOpen = !isOpen;
 
-    toolsMenu.classList.remove("open");
-    toolsMenuTrigger.setAttribute("aria-expanded", "false");
-}
+            document.querySelectorAll('.dropdown.open').forEach((openDropdown) => {
+                if (openDropdown !== dropdown) {
+                    openDropdown.classList.remove('open');
+                    const openToggle = openDropdown.querySelector('.dropdown-toggle');
+                    if (openToggle) {
+                        openToggle.setAttribute('aria-expanded', 'false');
+                    }
+                }
+            });
 
-toolsMenuTrigger?.addEventListener("click", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const isOpen = toolsMenu.classList.toggle("open");
-    toolsMenuTrigger.setAttribute("aria-expanded", String(isOpen));
-});
+            dropdown.classList.toggle('open', shouldOpen);
+            toggle.setAttribute('aria-expanded', String(shouldOpen));
+            return;
+        }
 
-document.addEventListener("click", (event) => {
-    if (toolsMenu && !toolsMenu.contains(event.target)) {
-        closeToolsMenu();
-    }
-});
-
-document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
-        closeToolsMenu();
-    }
-});
-
-document.addEventListener("click", (event) => {
-    const trigger = event.target.closest("[data-tool-target]");
-    if (!trigger) {
-        return;
-    }
-
-    const toolName = trigger.dataset.toolTarget;
-    const panel = document.querySelector(`[data-tool-panel="${toolName}"]`);
-    if (!panel) {
-        return;
-    }
-
-    event.preventDefault();
-    showTool(toolName);
-    closeToolsMenu();
-    history.replaceState(null, "", `#${toolName}`);
-    panel.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
+        if (!event.target.closest('.dropdown')) {
+            document.querySelectorAll('.dropdown.open').forEach((openDropdown) => {
+                openDropdown.classList.remove('open');
+                const openToggle = openDropdown.querySelector('.dropdown-toggle');
+                if (openToggle) {
+                    openToggle.setAttribute('aria-expanded', 'false');
+                }
+            });
+        }
     });
-});
-
-const initialTool = window.location.hash.replace("#", "") || "unlock";
-if (document.querySelector(`[data-tool-panel="${initialTool}"]`)) {
-    showTool(initialTool);
 }
+
+function initToolsMenu() {
+    const toolsMenu = document.querySelector('.tools-menu');
+    if (!toolsMenu) return;
+
+    const trigger = toolsMenu.querySelector('.tools-menu-trigger');
+    if (!trigger) return;
+
+    trigger.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const isOpen = trigger.getAttribute('aria-expanded') === 'true';
+        toolsMenu.classList.toggle('open', !isOpen);
+        trigger.setAttribute('aria-expanded', String(!isOpen));
+    });
+
+    document.addEventListener('click', (event) => {
+        if (!toolsMenu.contains(event.target)) {
+            toolsMenu.classList.remove('open');
+            trigger.setAttribute('aria-expanded', 'false');
+        }
+    });
+}
+
+function initForms() {
+    document.querySelectorAll('[data-download-form]').forEach(setupDownloadForm);
+    document.querySelectorAll('[data-dropzone]').forEach(bindDropzone);
+}
+
+function initThemeToggle() {
+    if (!themeToggle) return;
+    themeToggle.addEventListener('click', () => {
+        document.documentElement.classList.toggle('dark-mode');
+    });
+}
+
+function initAdminSidebarToggle() {
+    const sidebar = document.getElementById('admin-sidebar');
+    const toggle = document.querySelector('.sidebar-toggle');
+    if (!sidebar || !toggle) return;
+
+    toggle.addEventListener('click', () => {
+        const isOpen = sidebar.classList.toggle('sidebar-open');
+        toggle.setAttribute('aria-expanded', String(isOpen));
+    });
+}
+
+function initAdminTableSearch() {
+    const searchInputs = document.querySelectorAll('[data-admin-table-search]');
+    const table = document.getElementById('users-table');
+    if (!table || !searchInputs.length) return;
+
+    const rows = Array.from(table.querySelectorAll('tbody tr'));
+    const storageKey = 'swiftpdf-admin-user-search';
+
+    function applySearch(query) {
+        rows.forEach((row) => {
+            const text = row.textContent.toLowerCase();
+            row.style.display = query && !text.includes(query) ? 'none' : '';
+        });
+    }
+
+    const savedQuery = sessionStorage.getItem(storageKey) || '';
+    if (savedQuery) {
+        searchInputs.forEach((input) => {
+            input.value = savedQuery;
+        });
+        applySearch(savedQuery.trim().toLowerCase());
+    }
+
+    searchInputs.forEach((input) => {
+        input.addEventListener('input', () => {
+            const query = input.value.trim().toLowerCase();
+            sessionStorage.setItem(storageKey, input.value);
+            searchInputs.forEach((peerInput) => {
+                if (peerInput !== input) {
+                    peerInput.value = input.value;
+                }
+            });
+            applySearch(query);
+        });
+    });
+}
+
+function initAdminTableSort() {
+    const table = document.getElementById('users-table');
+    if (!table) return;
+
+    const tbody = table.querySelector('tbody');
+    const headers = Array.from(table.querySelectorAll('th.sortable'));
+    if (!tbody || !headers.length) return;
+
+    headers.forEach((header) => {
+        header.addEventListener('click', () => {
+            const index = Array.from(header.parentElement.children).indexOf(header);
+            const isAscending = header.dataset.sortDirection !== 'asc';
+            const sortType = header.dataset.sortType || 'text';
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+
+            rows.sort((leftRow, rightRow) => {
+                const leftCell = leftRow.children[index];
+                const rightCell = rightRow.children[index];
+                const leftValue = leftCell?.dataset.sortValue || leftCell?.textContent.trim() || '';
+                const rightValue = rightCell?.dataset.sortValue || rightCell?.textContent.trim() || '';
+
+                if (sortType === 'date') {
+                    return leftValue.localeCompare(rightValue);
+                }
+
+                const leftNumber = Number(leftValue);
+                const rightNumber = Number(rightValue);
+                if (!Number.isNaN(leftNumber) && !Number.isNaN(rightNumber)) {
+                    return leftNumber - rightNumber;
+                }
+
+                return leftValue.localeCompare(rightValue, undefined, { sensitivity: 'base' });
+            });
+
+            if (!isAscending) {
+                rows.reverse();
+            }
+
+            headers.forEach((sortableHeader) => {
+                sortableHeader.removeAttribute('data-sort-direction');
+            });
+            header.dataset.sortDirection = isAscending ? 'asc' : 'desc';
+            rows.forEach((row) => tbody.appendChild(row));
+        });
+    });
+}
+
+function initAdminUserEditor() {
+    const form = document.querySelector('[data-admin-user-form]');
+    const table = document.getElementById('users-table');
+    if (!form || !table) return;
+
+    const createAction = form.dataset.createAction || form.action;
+    const submitButton = form.querySelector('[data-user-submit]');
+    const cancelButton = form.querySelector('[data-cancel-edit]');
+    const passwordField = form.querySelector('[data-password-field]');
+    const editingSummary = document.querySelector('[data-editing-summary]');
+    const editingName = document.querySelector('[data-editing-name]');
+    const editingEmail = document.querySelector('[data-editing-email]');
+    const selectedSummary = document.querySelector('[data-selected-user-summary]');
+    const selectedName = document.querySelector('[data-selected-user-name]');
+    const rows = Array.from(table.querySelectorAll('[data-user-row]'));
+
+    function field(name) {
+        return form.querySelector(`[data-user-field="${name}"]`);
+    }
+
+    function clearSelection() {
+        rows.forEach((row) => {
+            row.classList.remove('is-selected');
+            const checkbox = row.querySelector('[data-user-select]');
+            if (checkbox) {
+                checkbox.checked = false;
+            }
+        });
+    }
+
+    function resetEditor() {
+        form.action = createAction;
+        form.reset();
+        if (passwordField) {
+            passwordField.required = true;
+            passwordField.placeholder = '';
+        }
+        if (submitButton) {
+            submitButton.textContent = 'Add User';
+        }
+        if (cancelButton) {
+            cancelButton.hidden = true;
+        }
+        if (editingSummary) {
+            editingSummary.hidden = true;
+        }
+        if (selectedSummary) {
+            selectedSummary.hidden = true;
+        }
+        clearSelection();
+    }
+
+    function selectUser(row) {
+        clearSelection();
+        row.classList.add('is-selected');
+        const checkbox = row.querySelector('[data-user-select]');
+        if (checkbox) {
+            checkbox.checked = true;
+        }
+
+        form.action = row.dataset.updateAction;
+        field('first_name').value = row.dataset.firstName || '';
+        field('last_name').value = row.dataset.lastName || '';
+        field('email').value = row.dataset.email || '';
+        field('role').value = row.dataset.role || 'free';
+        field('status').value = row.dataset.status || 'ACTIVE';
+        field('weekly_usage').value = row.dataset.weeklyUsage || '0';
+        field('premium_valid_from').value = row.dataset.premiumValidFrom || '';
+        field('premium_valid_until').value = row.dataset.premiumValidUntil || '';
+        field('clear_premium_validity').checked = false;
+
+        if (passwordField) {
+            passwordField.value = '';
+            passwordField.required = false;
+            passwordField.placeholder = 'Leave blank to keep current password';
+        }
+        if (submitButton) {
+            submitButton.textContent = 'Save User';
+        }
+        if (cancelButton) {
+            cancelButton.hidden = false;
+        }
+        if (editingName) {
+            editingName.textContent = row.dataset.fullName || row.dataset.email || 'Selected user';
+        }
+        if (editingEmail) {
+            editingEmail.textContent = row.dataset.email || '';
+            editingEmail.href = `mailto:${row.dataset.email || ''}`;
+        }
+        if (editingSummary) {
+            editingSummary.hidden = false;
+        }
+        if (selectedName) {
+            selectedName.textContent = row.dataset.fullName || row.dataset.email || 'Selected user';
+        }
+        if (selectedSummary) {
+            selectedSummary.hidden = false;
+        }
+
+        form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    rows.forEach((row) => {
+        row.querySelector('[data-user-select]')?.addEventListener('change', (event) => {
+            if (event.target.checked) {
+                selectUser(row);
+            } else {
+                resetEditor();
+            }
+        });
+    });
+
+    cancelButton?.addEventListener('click', resetEditor);
+}
+
+function initAdminDeleteConfirmation() {
+    const forms = document.querySelectorAll('[data-delete-user-form]');
+    const dialog = document.querySelector('[data-delete-user-dialog]');
+    const nameTarget = document.querySelector('[data-delete-user-name]');
+    const emailTarget = document.querySelector('[data-delete-user-email]');
+    const cancelButton = document.querySelector('[data-delete-cancel]');
+    const confirmButton = document.querySelector('[data-delete-confirm]');
+    const feedback = document.querySelector('[data-admin-feedback]');
+    let pendingForm = null;
+
+    if (!forms.length) return;
+
+    function showFeedback(message) {
+        if (!feedback) {
+            window.alert(message);
+            return;
+        }
+        feedback.textContent = message;
+        feedback.hidden = false;
+        feedback.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    function closeDialog() {
+        pendingForm = null;
+        if (dialog?.open) {
+            dialog.close();
+        }
+    }
+
+    forms.forEach((form) => {
+        form.addEventListener('submit', (event) => {
+            event.preventDefault();
+
+            if (form.dataset.deleteBlockedMessage) {
+                showFeedback(form.dataset.deleteBlockedMessage);
+                return;
+            }
+
+            pendingForm = form;
+            if (nameTarget) {
+                nameTarget.textContent = form.dataset.userName || 'Selected user';
+            }
+            if (emailTarget) {
+                emailTarget.textContent = form.dataset.userEmail || '';
+                emailTarget.href = `mailto:${form.dataset.userEmail || ''}`;
+            }
+
+            if (dialog?.showModal) {
+                dialog.showModal();
+                return;
+            }
+
+            const userLabel = `${form.dataset.userName || 'Selected user'}\n${form.dataset.userEmail || ''}`;
+            if (window.confirm(`Delete User\n\nAre you sure you want to delete:\n\n${userLabel}\n\nThis action cannot be undone.`)) {
+                form.submit();
+            }
+        });
+    });
+
+    cancelButton?.addEventListener('click', closeDialog);
+    dialog?.addEventListener('cancel', closeDialog);
+    confirmButton?.addEventListener('click', () => {
+        if (pendingForm) {
+            pendingForm.submit();
+        }
+        closeDialog();
+    });
+}
+function initFileInputPreviews() {
+    document.querySelectorAll('input[type="file"]').forEach((input) => {
+        input.addEventListener('change', () => {
+            const existing = input.parentElement.querySelector('.selected-file-name');
+
+            if (existing) {
+                existing.remove();
+            }
+
+            if (input.files.length > 0) {
+                const file = input.files[0];
+
+                const preview = document.createElement('div');
+                preview.className = 'selected-file-name';
+               preview.innerHTML = `
+    <span>
+        📄 ${file.name}
+        (${(file.size / 1024 / 1024).toFixed(2)} MB)
+    </span>
+
+    <button
+        type="button"
+        class="remove-file-btn"
+        title="Remove file">
+        🗑️
+    </button>
+`;
+                input.parentElement.appendChild(preview);
+                const removeBtn = preview.querySelector('.remove-file-btn');
+
+if (removeBtn) {
+    removeBtn.addEventListener('click', () => {
+        input.value = '';
+        preview.remove();
+    });
+}
+            }
+        });
+    });
+}
+document.addEventListener('DOMContentLoaded', () => {
+    initNav();
+    initDropdowns();
+    initToolsMenu();
+    initForms();
+    initThemeToggle();
+    initAdminSidebarToggle();
+    initAdminTableSearch();
+    initAdminTableSort();
+    initAdminUserEditor();
+    initAdminDeleteConfirmation();
+    initFileInputPreviews(); 
+    /*initQuickActions();*/
+});

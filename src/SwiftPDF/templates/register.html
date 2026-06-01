@@ -16,7 +16,7 @@
 
             <div class="auth-heading">
                 <h1>Create account</h1>
-                <p>Register to access the PDF tools dashboard. Use 10+ characters with uppercase, lowercase, number, and symbol.</p>
+                <p>Register to access the PDF tools dashboard. Use 8+ characters with uppercase, lowercase, and a number.</p>
             </div>
 
             {% if error %}
@@ -51,7 +51,22 @@
                     <input type="password" name="confirm_password" autocomplete="new-password" required>
                 </label>
 
-                <button class="primary-action" type="submit">Register</button>
+                <div class="auth-section-heading">
+                    <span class="eyebrow">Step 2</span>
+                    <h2>Security Verification</h2>
+                </div>
+
+                <label class="field">
+                    <span>Date of Birth</span>
+                    <input type="date" name="date_of_birth" value="{{ date_of_birth or '' }}" required>
+                </label>
+
+                <label class="field">
+                    <span>Which city are you currently living in?</span>
+                    <input type="text" name="current_city" value="{{ current_city or '' }}" autocomplete="address-level2" required>
+                </label>
+
+                <button class="primary-action" type="submit">Create Account</button>
             </form>
 
             <p class="auth-switch">Already have an account? <a href="{{ url_for('login') }}">Login</a></p>
