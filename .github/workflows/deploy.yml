@@ -1,0 +1,35 @@
+name: Deploy SwiftPDF
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            if [ ! -d "$HOME/SwiftPDF" ]; then
+              git clone https://github.com/YOUR_GITHUB_USERNAME/YOUR_REPO.git $HOME/SwiftPDF
+            fi
+
+            cd $HOME/SwiftPDF
+
+            git fetch origin
+            git reset --hard origin/main
+
+            source $HOME/venv/bin/activate
+
+            pip install -e .
+
+            sudo systemctl restart swiftpdf
+
+            sudo systemctl status swiftpdf --no-pager
