@@ -35,6 +35,9 @@ jobs:
             if [ ! -d "$HOME/SwiftPDF" ]; then
               git clone https://github.com/pundlamahesh/SwiftPDF.git "$HOME/SwiftPDF"
             fi
+            cd "$HOME/SwiftPDF"
+            git fetch origin
+            git reset --hard origin/main
 
             if [ ! -d "$HOME/venv" ]; then
               python3 -m venv "$HOME/venv"
@@ -48,12 +51,33 @@ jobs:
             pip install gunicorn
             pip install -e .
 
+            # Copy systemd service
+            sudo cp "$HOME/SwiftPDF/deploy/swiftpdf.service" /etc/systemd/system/swiftpdf.service
+
+            # Copy nginx config
+            sudo cp "$HOME/SwiftPDF/deploy/nginx.conf" /etc/nginx/sites-available/swiftpdf
+
+            # Enable nginx site
+            sudo ln -sf /etc/nginx/sites-available/swiftpdf /etc/nginx/sites-enabled/swiftpdf
+
+            # Remove default nginx site
+            sudo rm -f /etc/nginx/sites-enabled/default
+
+            # Reload systemd
             sudo systemctl daemon-reload
 
-            sudo systemctl enable swiftpdf || true
-            sudo systemctl restart swiftpdf || true
+            # Validate and start nginx
+            sudo nginx -t
+            sudo systemctl enable nginx
+            sudo systemctl restart nginx
+
+            sudo systemctl daemon-reload
+
+            sudo systemctl enable swiftpdf
+            sudo systemctl restart swiftpdf
 
             sleep 10
 
-            sudo systemctl status swiftpdf --no-pager || true
+            sudo systemctl status swiftpdf --no-pager
+            sudo systemctl status nginx --no-pager
 
