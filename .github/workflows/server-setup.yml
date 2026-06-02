@@ -1,0 +1,25 @@
+name: Server Setup
+
+on:
+workflow_dispatch:
+
+jobs:
+setup:
+runs-on: ubuntu-latest
+
+```
+steps:
+  - uses: actions/checkout@v4
+
+  - name: Setup Server
+    uses: appleboy/ssh-action@v1.2.0
+    with:
+      host: ${{ secrets.EC2_HOST }}
+      username: ${{ secrets.EC2_USER }}
+      key: ${{ secrets.EC2_SSH_KEY }}
+      script: |
+        cd /tmp
+        curl -O https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/server-setup.sh
+        chmod +x server-setup.sh
+        ./server-setup.sh
+```
