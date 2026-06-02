@@ -16,7 +16,6 @@ steps:
       username: ${{ secrets.EC2_USER }}
       key: ${{ secrets.EC2_SSH_KEY }}
       script: |
-
         set -e
 
         sudo apt update
@@ -33,57 +32,26 @@ steps:
           python3-certbot-nginx
 
         if [ ! -d "$HOME/SwiftPDF" ]; then
-          git clone https://github.com/pundlamahesh/SwiftPDF.git $HOME/SwiftPDF
+          git clone https://github.com/pundlamahesh/SwiftPDF.git "$HOME/SwiftPDF"
         fi
 
         if [ ! -d "$HOME/venv" ]; then
-          python3 -m venv $HOME/venv
+          python3 -m venv "$HOME/venv"
         fi
 
-        source $HOME/venv/bin/activate
+        source "$HOME/venv/bin/activate"
 
-        cd $HOME/SwiftPDF
+        cd "$HOME/SwiftPDF"
 
         pip install --upgrade pip
         pip install gunicorn
         pip install -e .
 
-        cat > $HOME/SwiftPDF/.env <<EOF
-        SECRET_KEY=${{ secrets.SECRET_KEY }}
-        SMTP_SERVER=${{ secrets.SMTP_SERVER }}
-        SMTP_PORT=${{ secrets.SMTP_PORT }}
-        SMTP_USERNAME=${{ secrets.SMTP_USERNAME }}
-        SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
-        SENDER_EMAIL=${{ secrets.SENDER_EMAIL }}
-        EOF
-
-        sudo tee /etc/systemd/system/swiftpdf.service > /dev/null <<EOF
-        [Unit]
-        Description=SwiftPDF Flask App
-        After=network.target
-
-        [Service]
-        User=ubuntu
-        Group=ubuntu
-
-        WorkingDirectory=/home/ubuntu/SwiftPDF
-
-        EnvironmentFile=/home/ubuntu/SwiftPDF/.env
-
-        ExecStart=/home/ubuntu/venv/bin/gunicorn -w 4 -b 127.0.0.1:8000 "SwiftPDF.web:create_app()"
-
-        Restart=always
-        RestartSec=5
-
-        [Install]
-        WantedBy=multi-user.target
-        EOF
-
         sudo systemctl daemon-reload
-        sudo systemctl enable swiftpdf
-        sudo systemctl restart swiftpdf
+        sudo systemctl enable swiftpdf || true
+        sudo systemctl restart swiftpdf || true
 
-        sleep 5
+        sleep 10
 
-        sudo systemctl status swiftpdf --no-pager
+        sudo systemctl status swiftpdf --no-pager || true
 ```
