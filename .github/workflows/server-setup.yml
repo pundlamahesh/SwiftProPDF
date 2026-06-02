@@ -1,57 +1,59 @@
+
+
 name: Server Setup
 
 on:
-workflow_dispatch:
+  workflow_dispatch:
 
 jobs:
-setup:
-runs-on: ubuntu-latest
+  setup:
+    runs-on: ubuntu-latest
 
-```
-steps:
-  - name: Setup SwiftPDF Server
-    uses: appleboy/ssh-action@v1.2.0
-    with:
-      host: ${{ secrets.EC2_HOST }}
-      username: ${{ secrets.EC2_USER }}
-      key: ${{ secrets.EC2_SSH_KEY }}
-      script: |
-        set -e
+    steps:
+      - name: Setup SwiftPDF Server
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
 
-        sudo apt update
+            sudo apt update
 
-        sudo apt install -y \
-          python3 \
-          python3-full \
-          python3-pip \
-          python3-venv \
-          git \
-          nginx \
-          libreoffice \
-          certbot \
-          python3-certbot-nginx
+            sudo apt install -y \
+              python3 \
+              python3-full \
+              python3-pip \
+              python3-venv \
+              git \
+              nginx \
+              libreoffice \
+              certbot \
+              python3-certbot-nginx
 
-        if [ ! -d "$HOME/SwiftPDF" ]; then
-          git clone https://github.com/pundlamahesh/SwiftPDF.git "$HOME/SwiftPDF"
-        fi
+            if [ ! -d "$HOME/SwiftPDF" ]; then
+              git clone https://github.com/pundlamahesh/SwiftPDF.git "$HOME/SwiftPDF"
+            fi
 
-        if [ ! -d "$HOME/venv" ]; then
-          python3 -m venv "$HOME/venv"
-        fi
+            if [ ! -d "$HOME/venv" ]; then
+              python3 -m venv "$HOME/venv"
+            fi
 
-        source "$HOME/venv/bin/activate"
+            source "$HOME/venv/bin/activate"
 
-        cd "$HOME/SwiftPDF"
+            cd "$HOME/SwiftPDF"
 
-        pip install --upgrade pip
-        pip install gunicorn
-        pip install -e .
+            pip install --upgrade pip
+            pip install gunicorn
+            pip install -e .
 
-        sudo systemctl daemon-reload
-        sudo systemctl enable swiftpdf || true
-        sudo systemctl restart swiftpdf || true
+            sudo systemctl daemon-reload
 
-        sleep 10
+            sudo systemctl enable swiftpdf || true
+            sudo systemctl restart swiftpdf || true
 
-        sudo systemctl status swiftpdf --no-pager || true
-```
+            sleep 10
+
+            sudo systemctl status swiftpdf --no-pager || true
+
