@@ -9,6 +9,7 @@ from uuid import uuid4
 from urllib.parse import urlparse
 
 from flask import Flask, abort, after_this_request, g, jsonify, redirect, render_template, request, send_file, session, url_for
+from werkzeug.exceptions import HTTPException, RequestEntityTooLarge
 from werkzeug.utils import secure_filename
 
 from SwiftPDF.auth import (
@@ -478,6 +479,21 @@ def create_app() -> Flask:
         if tool_path in tools_by_path:
             return render_tool_page(tools_by_path[tool_path], error=message), status_code
         return render_template("index.html", error=message, user=current_user()), status_code
+
+    @app.errorhandler(RequestEntityTooLarge)
+    def handle_upload_too_large(exc):
+        max_size_mb = max(1, app.config["MAX_CONTENT_LENGTH"] // (1024 * 1024))
+        return error_response(f"File is too large. Upload files up to {max_size_mb} MB.", 413)
+
+    @app.errorhandler(HTTPException)
+    def handle_http_exception(exc):
+        message = exc.description if isinstance(exc.description, str) else exc.name
+        return error_response(message, exc.code or 500)
+
+    @app.errorhandler(Exception)
+    def handle_unexpected_exception(exc):
+        app.logger.exception("Unhandled error while processing request")
+        return error_response("The server hit an unexpected error while processing this file.", 500)
 
     def render_register(error: str = "", **values):
         return render_template("register.html", error=error, **values)

@@ -3,6 +3,104 @@ const navToggle = document.querySelector('.nav-toggle');
 const navMenu = document.querySelector('.nav-menu');
 const themeToggle = document.querySelector('.theme-toggle');
 
+const homePhotoSlides = [
+    {
+        src: '/static/home-pdf-tools.png',
+        alt: 'PDF tools workspace with document pages and file controls',
+        label: 'PDF Tools',
+        title: 'Merge, split, rotate, and manage PDF pages.',
+    },
+    {
+        src: '/static/home-pdf-convert.png',
+        alt: 'PDF files converting into Office and image formats',
+        label: 'Convert PDF',
+        title: 'Turn PDFs into Word, Excel, PowerPoint, and images.',
+    },
+    {
+        src: '/static/home-pdf-compress.png',
+        alt: 'PDF compression and secure upload interface',
+        label: 'Compress PDF',
+        title: 'Reduce file size and export cleaner PDFs.',
+    },
+    {
+        src: '/static/home-pdf-unlock.png',
+        alt: 'Locked PDF file being unlocked in a secure interface',
+        label: 'Unlock PDF',
+        title: 'Open protected PDFs when you have the password.',
+    },
+    {
+        src: '/static/home-pdf-images.png',
+        alt: 'Image thumbnails being combined into a PDF document',
+        label: 'Images to PDF',
+        title: 'Combine scans and photos into one PDF.',
+    },
+    {
+        src: '/static/home-pdf-edit.png',
+        alt: 'PDF page thumbnails being rotated and edited',
+        label: 'Edit Pages',
+        title: 'Rotate pages or remove the ones you do not need.',
+    },
+];
+
+function setupHomePhotoSlider() {
+    const preview = document.querySelector('.upload-preview');
+    if (!preview || preview.querySelector('[data-home-photo-slider]')) return;
+    const dropzone = preview.querySelector('.upload-dropzone');
+    if (dropzone) {
+        dropzone.remove();
+    }
+
+    const slider = document.createElement('div');
+    slider.className = 'home-photo-slider';
+    slider.dataset.homePhotoSlider = '';
+    slider.innerHTML = `
+        ${homePhotoSlides.map((slide, index) => `
+            <div class="home-photo-slide${index === 0 ? ' is-active' : ''}">
+                <img src="${slide.src}" alt="${slide.alt}">
+                <div class="home-photo-caption">
+                    <span>${slide.label}</span>
+                    <strong>${slide.title}</strong>
+                </div>
+            </div>
+        `).join('')}
+        <div class="home-photo-dots" aria-label="PDF workflow photos">
+            ${homePhotoSlides.map((slide, index) => `
+                <button type="button" class="${index === 0 ? 'is-active' : ''}" aria-label="Show ${slide.label.toLowerCase()} photo"></button>
+            `).join('')}
+        </div>
+    `;
+
+    const body = document.createElement('div');
+    body.className = 'home-preview-body';
+    const stats = preview.querySelector('.hero-stats');
+    if (stats) {
+        preview.insertBefore(body, stats);
+    } else {
+        preview.appendChild(body);
+    }
+    body.appendChild(slider);
+
+    const slides = [...slider.querySelectorAll('.home-photo-slide')];
+    const dots = [...slider.querySelectorAll('.home-photo-dots button')];
+    let activeIndex = 0;
+
+    function showSlide(nextIndex) {
+        activeIndex = nextIndex;
+        slides.forEach((slide, index) => slide.classList.toggle('is-active', index === activeIndex));
+        dots.forEach((dot, index) => dot.classList.toggle('is-active', index === activeIndex));
+    }
+
+    dots.forEach((dot, index) => {
+        dot.addEventListener('click', () => showSlide(index));
+    });
+
+    window.setInterval(() => {
+        showSlide((activeIndex + 1) % slides.length);
+    }, 4500);
+}
+
+document.addEventListener('DOMContentLoaded', setupHomePhotoSlider);
+
 function setStatus(statusBox, message, type) {
     if (!statusBox) return;
     statusBox.hidden = false;
@@ -55,10 +153,25 @@ function clearFilePreviews(form) {
 
 async function readError(response) {
     try {
-        const payload = await response.json();
+        const payload = await response.clone().json();
         return payload?.error || 'Could not process the file.';
     } catch {
-        return 'Could not process the file.';
+        try {
+            const text = await response.text();
+            const plainText = text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+            if (plainText) {
+                return plainText.slice(0, 240);
+            }
+        } catch {
+            // Fall through to the status-based message below.
+        }
+        if (response.status === 413) {
+            return 'The file is too large for this server.';
+        }
+        if (response.status >= 500) {
+            return 'The server hit an error while processing this file.';
+        }
+        return `Could not process the file. Server returned ${response.status}.`;
     }
 }
 

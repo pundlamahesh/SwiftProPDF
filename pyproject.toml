@@ -32,6 +32,7 @@ where = ["src"]
 SwiftPDF = [
     "static/*.js",
     "static/*.css",
+    "static/*.png",
     "templates/*.html",
 ]
 

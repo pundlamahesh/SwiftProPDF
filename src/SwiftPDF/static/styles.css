@@ -1578,10 +1578,105 @@ body.dark-mode .status-pill--muted {
     gap: 22px;
 }
 
+.home-photo-slider {
+    position: relative;
+    min-height: 260px;
+    overflow: hidden;
+    border-radius: 8px;
+    background: #101820;
+    box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
+    isolation: isolate;
+}
+
+.home-photo-slide {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 600ms ease;
+}
+
+.home-photo-slide.is-active {
+    opacity: 1;
+}
+
+.home-photo-slide img {
+    width: 100%;
+    height: 100%;
+    min-height: 260px;
+    object-fit: cover;
+    display: block;
+}
+
+.home-photo-slide::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(8, 18, 30, 0.08), rgba(8, 18, 30, 0.74));
+    z-index: 1;
+}
+
+.home-photo-caption {
+    position: absolute;
+    left: 18px;
+    right: 18px;
+    bottom: 42px;
+    z-index: 2;
+    display: grid;
+    gap: 6px;
+    color: #ffffff;
+}
+
+.home-photo-caption span {
+    width: fit-content;
+    padding: 5px 9px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.18);
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.home-photo-caption strong {
+    max-width: 22rem;
+    font-size: 1.2rem;
+    line-height: 1.25;
+}
+
+.home-photo-dots {
+    position: absolute;
+    left: 18px;
+    bottom: 18px;
+    z-index: 3;
+    display: flex;
+    gap: 8px;
+}
+
+.home-photo-dots button {
+    width: 28px;
+    height: 4px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.46);
+    cursor: pointer;
+}
+
+.home-photo-dots button.is-active {
+    background: #ffffff;
+}
+
 .upload-preview {
     display: flex;
     flex-direction: column;
     gap: 18px;
+}
+
+.hero-panel-card .upload-preview > .upload-dropzone {
+    display: none;
+}
+
+.home-preview-body {
+    display: block;
 }
 
 .upload-head {
@@ -1796,6 +1891,21 @@ body.dark-mode .status-pill--muted {
 
 .tool-form-card {
     padding: 32px;
+}
+
+.home-preview-body .home-photo-slider {
+    min-width: 0;
+}
+
+@media (max-width: 780px) {
+    .home-photo-slider,
+    .home-photo-slide img {
+        min-height: 220px;
+    }
+
+    .hero-stats {
+        grid-template-columns: 1fr;
+    }
 }
 
 .upload-form {
