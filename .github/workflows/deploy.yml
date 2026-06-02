@@ -18,7 +18,7 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             if [ ! -d "$HOME/SwiftPDF" ]; then
-              git clone https://github.com/YOUR_GITHUB_USERNAME/YOUR_REPO.git $HOME/SwiftPDF
+              git clone https://github.com/pundlamahesh/SwiftPDF.git
             fi
 
             cd $HOME/SwiftPDF
