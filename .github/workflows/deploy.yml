@@ -1,9 +1,7 @@
 name: Deploy SwiftPDF
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 jobs:
   deploy:
