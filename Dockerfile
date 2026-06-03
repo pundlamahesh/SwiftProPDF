@@ -32,6 +32,8 @@ COPY --chown=swiftpdf:swiftpdf . .
 RUN pip install --upgrade pip setuptools wheel && \
     pip install -e .
 
+RUN pip install gunicorn
+
 # Create runtime directories. The Flask app stores SQLite data under the package instance path.
 RUN mkdir -p /app/src/SwiftPDF/instance /tmp/swiftpdf && \
     chown -R swiftpdf:swiftpdf /app/src/SwiftPDF/instance /tmp/swiftpdf
@@ -40,11 +42,11 @@ RUN mkdir -p /app/src/SwiftPDF/instance /tmp/swiftpdf && \
 USER swiftpdf
 
 # Expose port
-EXPOSE 5000
+EXPOSE 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5000/').read()" || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/').read()" || exit 1
 
 # Start application
-CMD ["swiftpdf-ui", "--host", "0.0.0.0", "--port", "5000"]
+CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:8000", "--timeout", "300", "SwiftPDF.web:create_app()"]
