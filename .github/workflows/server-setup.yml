@@ -70,6 +70,16 @@ jobs:
             sudo nginx -t
             sudo systemctl enable nginx
             sudo systemctl reload nginx || sudo systemctl restart nginx
+            cat > "$HOME/SwiftPDF/.env" << EOF
+            SECRET_KEY=${{ secrets.SECRET_KEY }}
+            SMTP_SERVER=${{ secrets.SMTP_SERVER }}
+            SMTP_PORT=${{ secrets.SMTP_PORT }}
+            SMTP_USERNAME=${{ secrets.SMTP_USERNAME }}
+            SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+            SENDER_EMAIL=${{ secrets.SENDER_EMAIL }}
+            EOF
+
+            chmod 600 "$HOME/SwiftPDF/.env"
 
             sudo systemctl enable swiftpdf
             sudo systemctl restart swiftpdf
