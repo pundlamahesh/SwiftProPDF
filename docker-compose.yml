@@ -4,16 +4,15 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: swiftpdf
+    env_file:
+      - .env
     ports:
-      - "5000:5000"
-    environment:
-      SWIFTPDF_SECRET_KEY: ${SWIFTPDF_SECRET_KEY:-change-this-in-production}
-      SWIFTPDF_COOKIE_SECURE: ${SWIFTPDF_COOKIE_SECURE:-0}
+      - "8000:8000"
     volumes:
       - swiftpdf-instance:/app/src/SwiftPDF/instance
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/').read()"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/').read()"]
       interval: 30s
       timeout: 10s
       retries: 3
