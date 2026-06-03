@@ -88,4 +88,3 @@ jobs:
 
             sudo systemctl status swiftpdf --no-pager
             sudo systemctl status nginx --no-pager
-

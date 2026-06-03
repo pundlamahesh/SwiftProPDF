@@ -1,0 +1,50 @@
+name: Docker Deploy
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy SwiftPDF Docker
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+
+            cd "$HOME/SwiftPDF"
+
+            echo "Fetching latest code..."
+            git fetch origin
+            git reset --hard origin/docker-migration
+
+            echo "Verifying .env exists..."
+            test -f .env
+
+            echo "Stopping existing containers..."
+            docker compose down || true
+
+            echo "Building latest image..."
+            docker compose build
+
+            echo "Starting containers..."
+            docker compose up -d
+
+            echo "Waiting for startup..."
+            sleep 15
+
+            echo "Container status:"
+            docker ps
+
+            echo "Container health:"
+            docker compose ps
+
+            echo "Recent logs:"
+            docker logs --tail 50 swiftpdf
+
+            echo "Deployment completed successfully."

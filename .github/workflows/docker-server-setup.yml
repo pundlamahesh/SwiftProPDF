@@ -1,0 +1,92 @@
+name: Docker Server Setup
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup SwiftPDF Docker Server
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+
+            echo "Updating packages..."
+            sudo apt update
+
+            echo "Installing required packages..."
+            sudo apt install -y \
+              git \
+              nginx \
+              docker.io \
+              docker-compose-v2 \
+              certbot \
+              python3-certbot-nginx
+
+            echo "Starting Docker..."
+            sudo systemctl enable docker
+            sudo systemctl start docker
+
+            echo "Adding ubuntu user to docker group..."
+            sudo usermod -aG docker ubuntu || true
+
+            echo "Cloning repository..."
+            if [ ! -d "$HOME/SwiftPDF" ]; then
+              git clone -b docker-migration \
+                https://github.com/pundlamahesh/SwiftPDF.git \
+                "$HOME/SwiftPDF"
+            fi
+
+            cd "$HOME/SwiftPDF"
+
+            git fetch origin
+            git reset --hard origin/docker-migration
+
+            echo "Creating .env file..."
+
+            cat > "$HOME/SwiftPDF/.env" << EOF
+            SECRET_KEY=${{ secrets.SECRET_KEY }}
+            SMTP_SERVER=${{ secrets.SMTP_SERVER }}
+            SMTP_PORT=${{ secrets.SMTP_PORT }}
+            SMTP_USERNAME=${{ secrets.SMTP_USERNAME }}
+            SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+            SENDER_EMAIL=${{ secrets.SENDER_EMAIL }}
+            EOF
+
+            echo "Configuring Nginx..."
+
+            sudo cp \
+              "$HOME/SwiftPDF/deploy/nginx.conf" \
+              /etc/nginx/sites-available/swiftpdf
+
+            sudo ln -sf \
+              /etc/nginx/sites-available/swiftpdf \
+              /etc/nginx/sites-enabled/swiftpdf
+
+            sudo rm -f /etc/nginx/sites-enabled/default
+
+            sudo nginx -t
+
+            sudo systemctl enable nginx
+            sudo systemctl restart nginx
+
+            echo "Building Docker image..."
+
+            docker compose build
+
+            echo "Starting SwiftPDF..."
+
+            docker compose up -d
+
+            echo "Waiting for startup..."
+            sleep 20
+
+            docker ps
+
+            echo "Server setup completed successfully."
