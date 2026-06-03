@@ -1545,6 +1545,11 @@ body.dark-mode .status-pill--muted {
     line-height: 1.02;
 }
 
+/* Reduce only the hero section primary heading to be less dominant */
+.hero-copy-block h1 {
+    font-size: clamp(1.8rem, 2.6vw, 2.6rem);
+}
+
 .hero-copy-block p,
 .tool-header p,
 .section-heading p,
