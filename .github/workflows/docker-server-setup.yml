@@ -21,13 +21,23 @@ jobs:
             sudo apt update
 
             echo "Installing required packages..."
+
             sudo apt install -y \
-              git \
-              nginx \
-              docker.io \
-              docker-compose-v2 \
-              certbot \
-              python3-certbot-nginx
+            git \
+            nginx \
+            docker.io \
+            docker-compose-v2 \
+            snapd
+
+            echo "Installing latest Certbot..."
+            sudo snap install core || true
+            sudo snap refresh core || true
+            sudo snap install --classic certbot || true
+
+            sudo ln -sf /snap/bin/certbot /usr/bin/certbot
+
+            echo "Certbot version:"
+            certbot --version
 
             echo "Starting Docker..."
             sudo systemctl enable docker
