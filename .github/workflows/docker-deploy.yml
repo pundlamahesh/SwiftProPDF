@@ -47,4 +47,8 @@ jobs:
             echo "Recent logs:"
             docker logs --tail 50 swiftpdf
 
+            echo "Cleaning Docker cache..."
+            sudo docker image prune -af
+            sudo docker builder prune -af
+
             echo "Deployment completed successfully."
