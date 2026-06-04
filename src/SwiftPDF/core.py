@@ -235,11 +235,59 @@ def merge_pdfs(input_paths: list[Path], output_path: Path, overwrite: bool = Fal
 # COMPRESS PDF
 # ============================================================================
 
-def compress_pdf(input_path: Path, output_path: Path, level: str = "medium", overwrite: bool = False) -> None:
-    """Compress a PDF by rewriting it with PDF stream optimization.
+# def compress_pdf(input_path: Path, output_path: Path, level: str = "medium", overwrite: bool = False) -> None:
+#     """Compress a PDF by rewriting it with PDF stream optimization.
     
-    Levels: low (minimal compression), medium (balanced), high (aggressive)
+#     Levels: low (minimal compression), medium (balanced), high (aggressive)
+#     """
+#     input_path = Path(input_path)
+#     output_path = Path(output_path)
+
+#     if not input_path.exists():
+#         raise PdfCompressError(f"Input PDF does not exist: {input_path}")
+
+#     if output_path.exists() and not overwrite:
+#         raise PdfCompressError(f"Output file already exists: {output_path}")
+
+#     if level not in ("low", "medium", "high"):
+#         raise PdfCompressError("Compression level must be: low, medium, or high")
+
+#     cleanup_map = {
+#         "low": {"garbage": 1, "clean": False},
+#         "medium": {"garbage": 3, "clean": True},
+#         "high": {"garbage": 4, "clean": True},
+#     }
+
+#     try:
+#         output_path.parent.mkdir(parents=True, exist_ok=True)
+
+#         with fitz.open(str(input_path)) as doc:
+#             if doc.needs_pass:
+#                 raise PdfCompressError("Encrypted PDFs must be unlocked before compressing.")
+
+#             doc.save(
+#                 str(output_path),
+#                 garbage=cleanup_map[level]["garbage"],
+#                 deflate=True,
+#                 clean=cleanup_map[level]["clean"],
+#             )
+            
+#     except PdfCompressError:
+#         raise
+#     except Exception as exc:
+#         raise PdfCompressError(f"Could not compress PDF: {str(exc)}") from exc
+def compress_pdf(input_path: Path, output_path: Path, level: str = "medium", overwrite: bool = False) -> None:
+    """Compress PDF.
+
+    Levels:
+        low    -> Fast lossless optimization (PyMuPDF)
+        medium -> Ghostscript balanced compression
+        high   -> Ghostscript aggressive compression
     """
+
+    import shutil
+    import subprocess
+
     input_path = Path(input_path)
     output_path = Path(output_path)
 
@@ -252,30 +300,78 @@ def compress_pdf(input_path: Path, output_path: Path, level: str = "medium", ove
     if level not in ("low", "medium", "high"):
         raise PdfCompressError("Compression level must be: low, medium, or high")
 
-    cleanup_map = {
-        "low": {"garbage": 1, "clean": False},
-        "medium": {"garbage": 3, "clean": True},
-        "high": {"garbage": 4, "clean": True},
-    }
-
     try:
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with fitz.open(str(input_path)) as doc:
-            if doc.needs_pass:
-                raise PdfCompressError("Encrypted PDFs must be unlocked before compressing.")
+        # LOW = PyMuPDF optimization
+        if level == "low":
+            with fitz.open(str(input_path)) as doc:
+                if doc.needs_pass:
+                    raise PdfCompressError(
+                        "Encrypted PDFs must be unlocked before compressing."
+                    )
 
-            doc.save(
-                str(output_path),
-                garbage=cleanup_map[level]["garbage"],
-                deflate=True,
-                clean=cleanup_map[level]["clean"],
+                doc.save(
+                    str(output_path),
+                    garbage=4,
+                    clean=True,
+                    deflate=True,
+                    deflate_images=True,
+                    deflate_fonts=True,
+                )
+            return
+
+        # MEDIUM/HIGH = Ghostscript
+        gs_binary = (
+            shutil.which("gs")
+            or shutil.which("gswin64c")
+            or shutil.which("gswin32c")
             )
-            
+
+        if not gs_binary:
+            raise PdfCompressError(
+                "Ghostscript is not installed on the server."
+            )
+
+        pdf_setting = {
+            "medium": "/ebook",
+            "high": "/screen",
+        }[level]
+
+        subprocess.run(
+            [
+                gs_binary,
+                "-sDEVICE=pdfwrite",
+                "-dCompatibilityLevel=1.4",
+                f"-dPDFSETTINGS={pdf_setting}",
+                "-dNOPAUSE",
+                "-dQUIET",
+                "-dBATCH",
+                f"-sOutputFile={output_path}",
+                str(input_path),
+            ],
+            check=True,
+            capture_output=True,
+        )
+
+        if not output_path.exists():
+            raise PdfCompressError(
+                "Compression completed but output file was not created."
+            )
+
     except PdfCompressError:
         raise
+
+    except subprocess.CalledProcessError as exc:
+        error_msg = exc.stderr.decode(errors="ignore")
+        raise PdfCompressError(
+            f"Ghostscript compression failed: {error_msg}"
+        ) from exc
+
     except Exception as exc:
-        raise PdfCompressError(f"Could not compress PDF: {str(exc)}") from exc
+        raise PdfCompressError(
+            f"Could not compress PDF: {str(exc)}"
+        ) from exc
 
 
 # ============================================================================
