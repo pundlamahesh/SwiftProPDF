@@ -93,6 +93,6 @@ jobs:
             echo "Waiting for startup..."
             sleep 20
 
-            docker ps
+            sudo docker ps
 
             echo "Server setup completed successfully."
