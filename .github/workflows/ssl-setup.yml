@@ -1,0 +1,43 @@
+name: SSL Setup
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ssl:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure SSL
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+
+            echo "Installing latest Certbot..."
+
+            sudo apt remove -y certbot python3-certbot-nginx || true
+
+            sudo apt install -y snapd
+
+            sudo snap install core || true
+            sudo snap refresh core || true
+            sudo snap install --classic certbot || true
+
+            sudo ln -sf /snap/bin/certbot /usr/bin/certbot
+
+            certbot --version
+
+            echo "Requesting certificate..."
+
+            sudo certbot --nginx \
+              --non-interactive \
+              --agree-tos \
+              --email support@swiftpropdf.com \
+              -d swiftpropdf.com \
+              -d www.swiftpropdf.com
+
+            echo "SSL setup completed."
