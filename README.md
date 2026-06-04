@@ -162,7 +162,9 @@ src/SwiftPDF/
   templates/       HTML templates
 tests/             Core, CLI, and auth tests
 ```
-#Email Config
+##Email Config
+
+```text
 to make support email to work we need to make 2 more entries in Route 53
 one TXt type record and one MX type record
 name : <blank>
@@ -172,5 +174,6 @@ value = "v=spf1 include:_spf.google.com ~all"
 name : <blank>
 recordtype:MX
 value : 1 SMTP.GOOGLE.COM
+```
 
 
