@@ -166,6 +166,7 @@ tests/             Core, CLI, and auth tests
 
 ```text
 to make support email to work we need to make 2 more entries in Route 53
+
 one TXt type record and one MX type record
 name : <blank>
 recordtype = TXT
