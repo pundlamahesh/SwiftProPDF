@@ -29,6 +29,7 @@
                         </button>
                         <div class="tools-menu-panel" id="all-tools-menu" role="menu">
                             <a class="tools-menu-item" role="menuitem" href="#unlock" data-tool-target="unlock">Unlock PDF</a>
+                            <a class="tools-menu-item" role="menuitem" href="#lock" data-tool-target="lock">Lock PDF</a>
                             <a class="tools-menu-item" role="menuitem" href="#merge" data-tool-target="merge">Merge PDF</a>
                             <a class="tools-menu-item" role="menuitem" href="#split" data-tool-target="split">Split PDF</a>
                             <a class="tools-menu-item" role="menuitem" href="#compress" data-tool-target="compress">Compress PDF</a>
@@ -108,6 +109,12 @@
                     <span class="tool-copy">Remove password protection when you know the password.</span>
                 </a>
 
+                <a class="tool-card" href="#lock" data-tool-target="lock">
+                    <span class="tool-icon">🔒</span>
+                    <span class="tool-title">Lock PDF</span>
+                    <span class="tool-copy">Add password protection before sharing.</span>
+                </a>
+
                 <a class="tool-card" href="#merge" data-tool-target="merge">
                     <span class="tool-icon">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
@@ -173,12 +180,7 @@
 
                 <a class="tool-card" href="#pdf-to-excel" data-tool-target="pdf-to-excel">
                     <span class="tool-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M5 5h14v14H5z" />
-                            <path d="M8 9h8" />
-                            <path d="M8 13h8" />
-                            <path d="M8 17h8" />
-                        </svg>
+                        📊
                     </span>
                     <span class="tool-title">PDF to Excel</span>
                     <span class="tool-copy">Extract PDF tables to Excel.</span>
@@ -274,6 +276,32 @@
                     </label>
 
                     <button class="primary-action" type="submit">Unlock PDF</button>
+                </form>
+            </div>
+        </section>
+
+        <section class="unlock-panel" id="lock" aria-labelledby="lock-title" data-tool-panel="lock" hidden>
+            <div class="panel-copy">
+                <p class="section-kicker">Active tool</p>
+                <h2 id="lock-title">Lock PDF</h2>
+                <p>Add password protection to a PDF and download the locked copy.</p>
+            </div>
+
+            <div class="form-card">
+                <div class="status" role="status" data-status hidden></div>
+
+                <form class="unlock-form" action="{{ url_for('lock') }}" method="post" enctype="multipart/form-data" data-download-form data-action-label="Locking your PDF..." data-success-label="Locked PDF downloaded. Form cleared.">
+                    <label class="field">
+                        <span>PDF file</span>
+                        <input type="file" name="pdf" accept="application/pdf,.pdf" required>
+                    </label>
+
+                    <label class="field">
+                        <span>Password</span>
+                        <input type="password" name="password" autocomplete="new-password" required>
+                    </label>
+
+                    <button class="primary-action" type="submit">Lock PDF</button>
                 </form>
             </div>
         </section>
@@ -413,7 +441,7 @@
                         <input type="file" name="pdf" accept="application/pdf,.pdf" required>
                     </label>
 
-                    <button class="primary-action" type="submit">Convert to Excel</button>
+                    <button class="primary-action" type="submit">📊 Convert to Excel</button>
                 </form>
             </div>
         </section>

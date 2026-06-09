@@ -24,6 +24,10 @@ class PdfUnlockError(Exception):
     """Raised when a PDF cannot be unlocked."""
 
 
+class PdfLockError(Exception):
+    """Raised when a PDF cannot be locked."""
+
+
 class PdfSplitError(Exception):
     """Raised when a PDF cannot be split."""
 
@@ -57,7 +61,7 @@ class QrCodeError(Exception):
 
 
 # ============================================================================
-# EXISTING FUNCTIONS (UNLOCK & SPLIT)
+# PDF SPLIT
 # ============================================================================
 
 def parse_page_ranges(page_ranges: str, page_count: int) -> list[int]:
@@ -105,7 +109,9 @@ def parse_page_ranges(page_ranges: str, page_count: int) -> list[int]:
         raise PdfSplitError("Enter at least one page number.")
 
     return selected_pages
-
+# ============================================================================
+# PDF UNLOCK
+# ============================================================================
 
 def unlock_pdf(input_path: Path, output_path: Path, password: str, overwrite: bool = False) -> None:
     """Unlock a PDF with the given password and write an unencrypted copy."""
@@ -148,6 +154,51 @@ def unlock_pdf(input_path: Path, output_path: Path, password: str, overwrite: bo
     except Exception as exc:
         raise PdfUnlockError(f"Could not write unlocked PDF: {output_path}") from exc
 
+
+# ============================================================================
+# PDF LOCK
+# ============================================================================
+
+def lock_pdf(input_path: Path, output_path: Path, password: str, overwrite: bool = False) -> None:
+    """Encrypt a PDF with the given password."""
+    input_path = Path(input_path)
+    output_path = Path(output_path)
+
+    if not input_path.exists():
+        raise PdfLockError(f"Input PDF does not exist: {input_path}")
+
+    if output_path.exists() and not overwrite:
+        raise PdfLockError(f"Output file already exists: {output_path}")
+
+    if not password:
+        raise PdfLockError("Enter a password to lock the PDF.")
+
+    try:
+        reader = PdfReader(str(input_path))
+    except Exception as exc:
+        raise PdfLockError(f"Could not read PDF: {input_path}") from exc
+
+    if reader.is_encrypted:
+        raise PdfLockError("This PDF is already encrypted. Unlock it before locking again.")
+
+    try:
+        writer = PdfWriter()
+        for page in reader.pages:
+            writer.add_page(page)
+
+        writer.encrypt(password)
+    except Exception as exc:
+        raise PdfLockError("Could not lock this PDF.") from exc
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with output_path.open("wb") as output_file:
+            writer.write(output_file)
+    except Exception as exc:
+        raise PdfLockError(f"Could not write locked PDF: {output_path}") from exc
+# ============================================================================
+# PDF SPLIT
+# ============================================================================
 
 def split_pdf(input_path: Path, output_path: Path, page_ranges: str, overwrite: bool = False) -> None:
     """Write a new PDF containing only the requested pages."""
@@ -234,48 +285,6 @@ def merge_pdfs(input_paths: list[Path], output_path: Path, overwrite: bool = Fal
 # ============================================================================
 # COMPRESS PDF
 # ============================================================================
-
-# def compress_pdf(input_path: Path, output_path: Path, level: str = "medium", overwrite: bool = False) -> None:
-#     """Compress a PDF by rewriting it with PDF stream optimization.
-    
-#     Levels: low (minimal compression), medium (balanced), high (aggressive)
-#     """
-#     input_path = Path(input_path)
-#     output_path = Path(output_path)
-
-#     if not input_path.exists():
-#         raise PdfCompressError(f"Input PDF does not exist: {input_path}")
-
-#     if output_path.exists() and not overwrite:
-#         raise PdfCompressError(f"Output file already exists: {output_path}")
-
-#     if level not in ("low", "medium", "high"):
-#         raise PdfCompressError("Compression level must be: low, medium, or high")
-
-#     cleanup_map = {
-#         "low": {"garbage": 1, "clean": False},
-#         "medium": {"garbage": 3, "clean": True},
-#         "high": {"garbage": 4, "clean": True},
-#     }
-
-#     try:
-#         output_path.parent.mkdir(parents=True, exist_ok=True)
-
-#         with fitz.open(str(input_path)) as doc:
-#             if doc.needs_pass:
-#                 raise PdfCompressError("Encrypted PDFs must be unlocked before compressing.")
-
-#             doc.save(
-#                 str(output_path),
-#                 garbage=cleanup_map[level]["garbage"],
-#                 deflate=True,
-#                 clean=cleanup_map[level]["clean"],
-#             )
-            
-#     except PdfCompressError:
-#         raise
-#     except Exception as exc:
-#         raise PdfCompressError(f"Could not compress PDF: {str(exc)}") from exc
 def compress_pdf(input_path: Path, output_path: Path, level: str = "medium", overwrite: bool = False) -> None:
     """Compress PDF.
 
@@ -373,6 +382,118 @@ def compress_pdf(input_path: Path, output_path: Path, level: str = "medium", ove
             f"Could not compress PDF: {str(exc)}"
         ) from exc
 
+# ============================================================================
+# COMPRESS IMAGES
+# ============================================================================
+
+def compress_image(input_path: Path, output_path: Path, level: str = "medium", overwrite: bool = False) -> None:
+    """Compress an image file.
+
+    Levels:
+        low    -> Mild compression, high quality
+        medium -> Balanced compression
+        high   -> Aggressive compression
+    """
+
+    input_path = Path(input_path)
+    output_path = Path(output_path)
+
+    if not input_path.exists():
+        raise ImageConversionError(f"Input image does not exist: {input_path}")
+
+    if output_path.exists() and not overwrite:
+        raise ImageConversionError(f"Output file already exists: {output_path}")
+
+    if level not in ("low", "medium", "high"):
+        raise ImageConversionError("Compression level must be: low, medium, or high")
+
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        quality_map = {
+            "low": 85,
+            "medium": 70,
+            "high": 50,
+        }
+
+        resize_map = {
+            "low": 3000,
+            "medium": 2000,
+            "high": 1200,
+        }
+
+        compress_level_map = {
+            "low": 3,
+            "medium": 6,
+            "high": 9,
+        }
+
+        with Image.open(input_path) as img:
+            img_format = (img.format or input_path.suffix.lstrip(".")).upper()
+
+            max_dimension = resize_map[level]
+
+            # Resize large images
+            if max(img.size) > max_dimension:
+                img.thumbnail(
+                    (max_dimension, max_dimension),
+                    Image.Resampling.LANCZOS,
+                )
+
+            # JPEG
+            if img_format in ("JPEG", "JPG"):
+                rgb = img.convert("RGB")
+
+                rgb.save(
+                    output_path,
+                    format="JPEG",
+                    quality=quality_map[level],
+                    optimize=True,
+                    progressive=True,
+                )
+                return
+
+            # PNG
+            if img_format == "PNG":
+                img.save(
+                    output_path,
+                    format="PNG",
+                    optimize=True,
+                    compress_level=compress_level_map[level],
+                )
+                return
+
+            # WEBP
+            if img_format == "WEBP":
+                img.save(
+                    output_path,
+                    format="WEBP",
+                    quality=quality_map[level],
+                    optimize=True,
+                    method=6,
+                )
+                return
+
+            # GIF
+            if img_format == "GIF":
+                img.save(
+                    output_path,
+                    format="GIF",
+                    optimize=True,
+                )
+                return
+
+            # Fallback
+            img.save(
+                output_path,
+                format=img_format,
+                optimize=True,
+            )
+
+    except Exception as exc:
+        raise ImageConversionError(
+            f"Could not compress image: {str(exc)}"
+        ) from exc
 
 # ============================================================================
 # PDF TO IMAGES (PDF → JPG)
@@ -459,7 +580,9 @@ def images_to_pdf(input_paths: list[Path], output_path: Path, overwrite: bool = 
         raise
     except Exception as exc:
         raise ImageConversionError(f"Could not convert images to PDF: {str(exc)}") from exc
-
+# ============================================================================
+# QR CODE GENERATION
+# ============================================================================
 
 def generate_qr_code(data: str, output_path: Path, size: int = 500, overwrite: bool = False) -> None:
     """Generate a QR code PNG image from a URL or text."""
@@ -764,7 +887,9 @@ def rotate_pdf_pages(input_path: Path, output_path: Path, page_ranges: str, angl
     except Exception as exc:
         raise PdfEditError(f"Could not rotate PDF pages: {str(exc)}") from exc
 
-
+# ============================================================================
+# DELETE PDF PAGES
+# ============================================================================
 def delete_pdf_pages(input_path: Path, output_path: Path, page_ranges: str, overwrite: bool = False) -> None:
     """Delete specified pages from PDF."""
     input_path = Path(input_path)

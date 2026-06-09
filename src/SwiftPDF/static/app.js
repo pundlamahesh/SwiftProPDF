@@ -63,6 +63,10 @@ function setupHomePhotoSlider() {
                 </div>
             </div>
         `).join('')}
+        <div class="home-photo-nav" aria-label="Photo slider navigation">
+            <button type="button" class="home-photo-button home-photo-prev" data-photo-prev aria-label="Previous photo">‹</button>
+            <button type="button" class="home-photo-button home-photo-next" data-photo-next aria-label="Next photo">›</button>
+        </div>
         <div class="home-photo-dots" aria-label="PDF workflow photos">
             ${homePhotoSlides.map((slide, index) => `
                 <button type="button" class="${index === 0 ? 'is-active' : ''}" aria-label="Show ${slide.label.toLowerCase()} photo"></button>
@@ -93,6 +97,21 @@ function setupHomePhotoSlider() {
     dots.forEach((dot, index) => {
         dot.addEventListener('click', () => showSlide(index));
     });
+
+    const prevButton = slider.querySelector('[data-photo-prev]');
+    const nextButton = slider.querySelector('[data-photo-next]');
+
+    if (prevButton) {
+        prevButton.addEventListener('click', () => {
+            showSlide((activeIndex - 1 + slides.length) % slides.length);
+        });
+    }
+
+    if (nextButton) {
+        nextButton.addEventListener('click', () => {
+            showSlide((activeIndex + 1) % slides.length);
+        });
+    }
 
     window.setInterval(() => {
         showSlide((activeIndex + 1) % slides.length);
