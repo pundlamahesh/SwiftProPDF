@@ -1666,6 +1666,38 @@ body.dark-mode .status-pill--muted {
     cursor: pointer;
 }
 
+.home-photo-nav {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 14px;
+    pointer-events: none;
+}
+
+.home-photo-button {
+    pointer-events: auto;
+    border: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.4);
+    color: #ffffff;
+    font-size: 1.6rem;
+    line-height: 1;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s ease;
+}
+
+.home-photo-button:hover {
+    background: rgba(0, 0, 0, 0.6);
+}
+
 .home-photo-dots button.is-active {
     background: #ffffff;
 }
@@ -1794,15 +1826,15 @@ body.dark-mode .status-pill--muted {
 
 .tool-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 20px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
 }
 
 .tool-card {
     display: grid;
-    gap: 18px;
-    padding: 28px;
-    border-radius: 28px;
+    gap: 8px;
+    padding: 14px;
+    border-radius: 16px;
     background: var(--surface);
     border: 1px solid transparent;
     box-shadow: var(--shadow);
@@ -1816,28 +1848,31 @@ body.dark-mode .status-pill--muted {
 }
 
 .tool-icon {
-    width: 54px;
-    height: 54px;
+    width: 36px;
+    height: 36px;
     display: grid;
     place-items: center;
-    border-radius: 18px;
+    border-radius: 12px;
     background: var(--surface-muted);
     color: var(--accent-dark);
-    font-size: 1.3rem;
+    font-size: 1rem;
 }
 
 .tool-card h3 {
     margin: 0;
+    font-size: 1rem;
 }
 
 .tool-card p {
     margin: 0;
     color: var(--ink-muted);
+    font-size: 0.9rem;
+    line-height: 1.45;
 }
 
 .card-chevron {
     justify-self: end;
-    font-size: 1.2rem;
+    font-size: 1rem;
     color: var(--accent);
 }
 
@@ -1995,6 +2030,32 @@ body.dark-mode .status-pill--muted {
     padding: 28px;
     line-height: 1.8;
     color: var(--ink-muted);
+}
+
+.legal-page .page-copy {
+    display: grid;
+    gap: 16px;
+    overflow: visible;
+}
+
+.legal-page .page-copy h2 {
+    margin: 10px 0 0;
+    color: var(--ink);
+    font-size: 1.25rem;
+}
+
+.legal-page .page-copy p,
+.legal-page .page-copy ul {
+    margin: 0;
+}
+
+.legal-page .page-copy ul {
+    padding-left: 1.25rem;
+}
+
+.legal-page .page-copy a {
+    color: var(--accent);
+    font-weight: 700;
 }
 
 .site-footer {
@@ -2201,6 +2262,15 @@ body.dark-mode .status-pill--muted {
     font-weight: 600;
 }
 
+.qr-image {
+    display: block;
+    margin: 20px auto 0;
+    max-width: 160px;
+    width: min(100%, 160px);
+    height: auto;
+    border-radius: 16px;
+}
+
 .contact-footer-card {
     margin-top: 40px;
     padding: 28px;
@@ -2223,17 +2293,20 @@ margin-bottom: 48px;
 
 .pricing-grid {
 display: grid;
-grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-gap: 28px;
+grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+gap: 18px;
 }
 
 .pricing-card {
 background: var(--surface);
 border: 1px solid var(--border);
 border-radius: 24px;
-padding: 32px;
+padding: 14px;
 position: relative;
 transition: transform .2s ease;
+display: flex;
+flex-direction: column;
+justify-content: space-between;
 }
 
 .pricing-card:hover {
@@ -2247,12 +2320,12 @@ transform: scale(1.03);
 
 .plan-badge {
 display: inline-block;
-padding: 6px 12px;
+padding: 4px 8px;
 border-radius: 999px;
 background: rgba(37,99,235,.12);
-font-size: .85rem;
+font-size: .8rem;
 font-weight: 600;
-margin-bottom: 16px;
+margin-bottom: 10px;
 }
 
 .plan-badge.premium {
@@ -2260,24 +2333,30 @@ background: rgba(245,158,11,.15);
 }
 
 .price {
-font-size: 3rem;
+font-size: 1.85rem;
 font-weight: 700;
-margin: 20px 0;
+margin: 10px 0;
 }
 
 .price span {
-font-size: 1rem;
+font-size: 0.85rem;
+color: var(--ink-muted);
+}
+
+.price-note {
+margin: 6px 0 12px;
+font-size: 0.9rem;
 color: var(--ink-muted);
 }
 
 .pricing-card ul {
 list-style: none;
 padding: 0;
-margin: 24px 0;
+margin: 12px 0;
 }
 
 .pricing-card li {
-margin-bottom: 12px;
+margin-bottom: 6px;
 color: var(--ink-muted);
 }
 
@@ -2285,7 +2364,7 @@ color: var(--ink-muted);
 display: inline-flex;
 justify-content: center;
 width: 100%;
-padding: 14px 20px;
+padding: 10px 14px;
 border-radius: 12px;
 text-decoration: none;
 font-weight: 600;

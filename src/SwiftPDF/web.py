@@ -43,9 +43,9 @@ from SwiftPDF.auth import (
     record_tool_usage,
 )
 from SwiftPDF.core import (
-    PdfSplitError, PdfUnlockError, split_pdf, unlock_pdf,
+    PdfSplitError, PdfUnlockError, PdfLockError, split_pdf, unlock_pdf, lock_pdf,
     PdfMergeError, merge_pdfs,
-    PdfCompressError, compress_pdf,
+    PdfCompressError, compress_pdf, compress_image,
     ImageConversionError, pdf_to_images, images_to_pdf,
     PdfConversionError, pdf_to_word, pdf_to_powerpoint, pdf_to_excel,
     OfficeConversionError, office_to_pdf,
@@ -119,6 +119,23 @@ def create_app() -> Flask:
             "tips": ["Keep your password ready.", "Only PDF files are accepted.", "Download starts automatically."],
         },
         {
+            "path": "lock",
+            "title": "Lock PDF",
+            "icon_html": "🔒",
+            "description": "Add password protection to a PDF before sharing.",
+            "post_route": "lock",
+            "input_label": "PDF file",
+            "input_name": "pdf",
+            "accept": "application/pdf,.pdf",
+            "multiple": False,
+            "action_label": "Lock PDF",
+            "fields": [
+                {"type": "password", "name": "password", "label": "Password", "placeholder": "Create a PDF password", "required": True},
+            ],
+            "related": ["unlock", "compress", "merge"],
+            "tips": ["Use a strong password.", "Keep a copy of the password safely.", "Encrypted PDFs must be unlocked before editing."],
+        },
+        {
             "path": "split",
             "title": "Split PDF",
             "icon_html": "✂️",
@@ -175,8 +192,38 @@ def create_app() -> Flask:
                     ],
                 },
             ],
-            "related": ["unlock", "split", "merge"],
+            "related": ["unlock", "split", "merge", "compress-image"],
             "tips": ["Medium is the best balance.", "High gives more reduction.", "Low preserves quality."],
+        },
+        {
+            "path": "compress-image",
+            "title": "Compress Image",
+            "icon_html": "🖼️",
+            "description": "Reduce image file size while preserving quality.",
+            "post_route": "compress_image_route",
+            "input_label": "Image file",
+            "input_name": "image",
+            "accept": "image/*",
+            "multiple": False,
+            "action_label": "Compress Image",
+            "fields": [
+                {
+                    "type": "select",
+                    "name": "level",
+                    "label": "Compression level",
+                    "required": True,
+                    "value": "medium",
+                    "options": [
+                        {"label": "Low (better quality)", "value": "low"},
+                        {"label": "Medium (balanced)", "value": "medium"},
+                        {"label": "High (smaller file)", "value": "high"},
+                    ],
+                },
+            ],
+            "related": ["compress", "images-to-pdf", "pdf-to-images"],
+            "tips": ["Use high compression for smaller files.", "Medium keeps a nice balance.", "Supported formats include JPG, PNG, and WEBP."],
+            "form_heading": "Upload an image",
+            "form_description": "Compress your image file and download the optimized version instantly.",
         },
         {
             "path": "pdf-to-word",
@@ -211,14 +258,14 @@ def create_app() -> Flask:
         {
             "path": "pdf-to-excel",
             "title": "PDF to Excel",
-            "icon_htmml": "📈",
+            "icon_html": "📊",
             "description": "Extract tables from a PDF into an Excel workbook.",
             "post_route": "pdf_to_excel_route",
             "input_label": "PDF file",
             "input_name": "pdf",
             "accept": "application/pdf,.pdf",
             "multiple": False,
-            "action_label": "Convert to Excel",
+            "action_label": "📊 Convert to Excel",
             "fields": [],
             "related": ["pdf-to-word", "office-to-pdf", "compress"],
             "tips": ["Table-heavy PDFs work best.", "Review the workbook after export.", "Small tables convert cleanest."],
@@ -268,7 +315,7 @@ def create_app() -> Flask:
             "fields": [
                 {"type": "number", "name": "dpi", "label": "DPI (72–300)", "placeholder": "150", "required": True, "value": "150", "min": "72", "max": "300"},
             ],
-            "related": ["images-to-pdf", "compress", "pdf-to-word"],
+            "related": ["images-to-pdf", "compress", "compress-image", "pdf-to-word"],
             "tips": ["150 DPI is a good balance.", "High DPI produces larger images.", "Perfect for image previews."],
         },
         {
@@ -283,7 +330,7 @@ def create_app() -> Flask:
             "multiple": True,
             "action_label": "Create PDF",
             "fields": [],
-            "related": ["pdf-to-images", "office-to-pdf", "merge"],
+            "related": ["pdf-to-images", "office-to-pdf", "merge", "compress-image"],
             "tips": ["Upload JPG, PNG, GIF, or BMP files.", "Files are combined in selected order.", "Use images with consistent orientation."],
         },
         {
@@ -557,33 +604,14 @@ def create_app() -> Flask:
     @app.get("/privacy")
     def privacy():
         return render_template(
-            "page.html",
-            page={
-                "label": "Privacy",
-                "title": "Privacy Policy",
-                "description": "How SwiftPDF handles accounts, uploads, and recovery data.",
-                "content": (
-                    "<p>Uploaded files are processed temporarily and removed after downloads complete. "
-                    "Account passwords and security-question answers are stored only as hashes. "
-                    "Audit logs record operational events such as login, password reset, tool usage, and admin actions.</p>"
-                ),
-            },
+            "privacy.html",
             tools=tools,
         )
 
     @app.get("/terms")
     def terms():
         return render_template(
-            "page.html",
-            page={
-                "label": "Terms",
-                "title": "Terms of Use",
-                "description": "Use SwiftPDF responsibly and only process files you are authorized to handle.",
-                "content": (
-                    "<p>SwiftPDF is provided for document processing workflows. Users are responsible for uploaded content, "
-                    "for respecting file ownership and access rights, and for keeping account credentials secure.</p>"
-                ),
-            },
+            "terms.html",
             tools=tools,
         )
 
@@ -1021,6 +1049,42 @@ def create_app() -> Flask:
 
         return send_file(output_path, as_attachment=True, download_name=output_name)
 
+    @app.post("/lock")
+    def lock():
+        uploaded_file = request.files.get("pdf")
+        password = request.form.get("password", "")
+
+        if uploaded_file is None or uploaded_file.filename == "":
+            return error_response("Choose a PDF file first.", 400)
+
+        if not password:
+            return error_response("Enter a password to lock the PDF.", 400)
+
+        filename = secure_filename(uploaded_file.filename)
+        if not filename.lower().endswith(".pdf"):
+            return error_response("Only PDF files are supported.", 400)
+
+        work_dir = Path(tempfile.mkdtemp(prefix="swiftpdf-lock-"))
+        input_path = work_dir / f"{uuid4()}-{filename}"
+        output_name = f"{Path(filename).stem}-locked.pdf"
+        output_path = work_dir / output_name
+        uploaded_file.save(input_path)
+
+        try:
+            lock_pdf(input_path, output_path, password=password, overwrite=True)
+            log_audit("tool_lock", f"Locked {filename}.")
+            track_tool_usage("lock")
+        except PdfLockError as exc:
+            shutil.rmtree(work_dir, ignore_errors=True)
+            return error_response(str(exc), 400)
+
+        @after_this_request
+        def cleanup(response):
+            response.call_on_close(lambda: shutil.rmtree(work_dir, ignore_errors=True))
+            return response
+
+        return send_file(output_path, as_attachment=True, download_name=output_name)
+
     @app.post("/split")
     def split():
         uploaded_file = request.files.get("pdf")
@@ -1134,7 +1198,45 @@ def create_app() -> Flask:
         def cleanup(response):
             response.call_on_close(lambda: shutil.rmtree(work_dir, ignore_errors=True))
             return response
-        
+
+        return send_file(output_path, as_attachment=True, download_name=output_name)
+
+    @app.post("/compress-image")
+    def compress_image_route():
+        uploaded_file = request.files.get("image")
+        level = request.form.get("level", "medium")
+
+        if uploaded_file is None or uploaded_file.filename == "":
+            return error_response("Choose an image file first.", 400)
+
+        filename = secure_filename(uploaded_file.filename)
+        suffix = Path(filename).suffix.lower()
+        if suffix not in (".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"):
+            return error_response("Only JPG, PNG, WEBP, GIF, and BMP image files are supported.", 400)
+
+        if level not in ("low", "medium", "high"):
+            return error_response("Invalid compression level.", 400)
+
+        work_dir = Path(tempfile.mkdtemp(prefix="swiftpdf-image-compress-"))
+        input_path = work_dir / f"{uuid4()}-{filename}"
+        output_name = f"{Path(filename).stem}-compressed{suffix}"
+        output_path = work_dir / output_name
+        uploaded_file.save(input_path)
+
+        try:
+            compress_image(input_path, output_path, level=level, overwrite=True)
+        except ImageConversionError as exc:
+            shutil.rmtree(work_dir, ignore_errors=True)
+            return error_response(str(exc), 400)
+
+        log_audit("tool_compress_image", f"Compressed {filename} at {level} level.")
+        track_tool_usage("compress-image")
+
+        @after_this_request
+        def cleanup(response):
+            response.call_on_close(lambda: shutil.rmtree(work_dir, ignore_errors=True))
+            return response
+
         return send_file(output_path, as_attachment=True, download_name=output_name)
 
     @app.post("/pdf-to-images")

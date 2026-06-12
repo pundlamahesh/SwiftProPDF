@@ -45,6 +45,19 @@
                 We'd love to hear it.
             </p>
         </div>
+
+        <div class="contact-card">
+            <div class="contact-icon">📱</div>
+            <h3>Pay for Premium</h3>
+            <!--<p>
+                Scan this QR code to pay ₹499 for premium membership.
+                Your payment app should open with the amount prefilled.
+                After payment, email support with your transaction details.
+            </p>-->
+            <img src="{{ url_for('static', filename='QR.jpeg') }}"
+                 alt="Pay for SwiftPDF Premium"
+                 class="qr-image">
+        </div>
     </div>
     <p></p>
 
@@ -62,10 +75,18 @@
         <strong>₹499 per year</strong>
     </p>
 
-    <a href="mailto:support@swiftpropdf.com"
-       class="contact-link">
-        Contact Us to Activate Premium on our Email: Support@swiftprodpdf.com
-    </a>
+    <p>
+        Scan the payment QR code below to pay for the premium membership.
+        After payment, email us at <strong>support@swiftpropdf.com</strong>
+        with your transaction details and we will activate your membership
+        within the next 2 business hours.
+    </p>
+
+    <p>
+        <strong>Sorry for the inconvenience. Auto-update of premium memberships via payment gateway will be available soon.</strong>
+        <br>
+        Thank you for your understanding.
+    </p>
 </div>
 
     <div class="contact-footer-card">
