@@ -10,6 +10,8 @@ MAX_FAILED_LOGINS = 5
 LOCKOUT_MINUTES = 15
 MAX_FAILED_RESET_ATTEMPTS = 5
 RESET_LOCKOUT_MINUTES = 30
+MAX_ACTIVE_USER_SESSIONS = 2
+USER_SESSION_HOURS = 8
 
 
 class AuthError(Exception):
@@ -99,10 +101,31 @@ def init_db(database_path: Path) -> None:
             )
             """
         )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                session_token TEXT NOT NULL UNIQUE,
+                user_agent TEXT NOT NULL DEFAULT '',
+                ip_address TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                last_seen_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            )
+            """
+        )
         ensure_column(connection, "user_security_questions", "failed_reset_attempts", "INTEGER NOT NULL DEFAULT 0")
         ensure_column(connection, "user_security_questions", "reset_locked_until", "TEXT")
         ensure_column(connection, "usage_tracking", "usage_date", "TEXT NOT NULL")
         ensure_column(connection, "usage_tracking", "usage_week", "TEXT NOT NULL")
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS user_sessions_user_expires_idx
+            ON user_sessions(user_id, expires_at)
+            """
+        )
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS settings (
@@ -490,7 +513,87 @@ def delete_user(database_path: Path, user_id: int) -> None:
     with sqlite3.connect(database_path) as connection:
         connection.execute("DELETE FROM audit_events WHERE user_id = ?", (user_id,))
         connection.execute("DELETE FROM user_security_questions WHERE user_id = ?", (user_id,))
+        connection.execute("DELETE FROM user_sessions WHERE user_id = ?", (user_id,))
         connection.execute("DELETE FROM users WHERE id = ?", (user_id,))
+
+
+def create_user_session(
+    database_path: Path,
+    user_id: int,
+    session_token: str,
+    user_agent: str = "",
+    ip_address: str = "",
+) -> None:
+    now = utc_now()
+    expires_at = now + timedelta(hours=USER_SESSION_HOURS)
+    with sqlite3.connect(database_path) as connection:
+        prune_expired_user_sessions(connection, now)
+        active_count = connection.execute(
+            "SELECT COUNT(*) FROM user_sessions WHERE user_id = ? AND expires_at > ?",
+            (user_id, now.isoformat()),
+        ).fetchone()[0]
+        if int(active_count) >= MAX_ACTIVE_USER_SESSIONS:
+            raise AuthError("This account is already logged in on 2 devices. Please log out from another device and try again.")
+
+        connection.execute(
+            """
+            INSERT INTO user_sessions (user_id, session_token, user_agent, ip_address, created_at, last_seen_at, expires_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                user_id,
+                session_token,
+                user_agent[:255],
+                ip_address[:80],
+                now.isoformat(),
+                now.isoformat(),
+                expires_at.isoformat(),
+            ),
+        )
+
+
+def is_user_session_active(database_path: Path, user_id: int, session_token: str) -> bool:
+    now = utc_now()
+    with sqlite3.connect(database_path) as connection:
+        prune_expired_user_sessions(connection, now)
+        row = connection.execute(
+            """
+            SELECT 1 FROM user_sessions
+            WHERE user_id = ? AND session_token = ? AND expires_at > ?
+            """,
+            (user_id, session_token, now.isoformat()),
+        ).fetchone()
+        if row is None:
+            return False
+
+        connection.execute(
+            """
+            UPDATE user_sessions
+            SET last_seen_at = ?, expires_at = ?
+            WHERE user_id = ? AND session_token = ?
+            """,
+            (
+                now.isoformat(),
+                (now + timedelta(hours=USER_SESSION_HOURS)).isoformat(),
+                user_id,
+                session_token,
+            ),
+        )
+    return True
+
+
+def delete_user_session(database_path: Path, user_id: int, session_token: str) -> None:
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            "DELETE FROM user_sessions WHERE user_id = ? AND session_token = ?",
+            (user_id, session_token),
+        )
+
+
+def prune_expired_user_sessions(connection: sqlite3.Connection, now: datetime | None = None) -> None:
+    if now is None:
+        now = utc_now()
+    connection.execute("DELETE FROM user_sessions WHERE expires_at <= ?", (now.isoformat(),))
 
 
 def authenticate_user(database_path: Path, email: str, password: str) -> dict[str, str | int]:

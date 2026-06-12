@@ -5,16 +5,6 @@
 
 {% block content %}
 <section class="hero-panel">
-    <div class="hero-copy-block">
-        <span class="eyebrow">Professional PDF tools</span>
-        <h1>All your PDF tools in one sleek workspace.</h1>
-        <p>Upload, convert, merge, compress, and edit PDFs with a modern experience inspired by top SaaS workflows. No forced login required.</p>
-        <div class="hero-actions">
-            <a class="cta-button" href="{{ url_for('tool_page', tool_name='unlock') }}">Start with Unlock</a>
-            <a class="ghost-button" href="#tools-grid">Browse tools</a>
-        </div>
-    </div>
-
     <div class="hero-panel-card">
         <div class="upload-preview">
             <div class="upload-head">
@@ -50,6 +40,17 @@
                 <strong>Instant</strong>
                 <p>Downloads</p>
             </div>
+        </div>
+    </div>
+    </div>
+
+    <div class="hero-copy-block">
+        <span class="eyebrow">Professional PDF tools</span>
+        <h1>All your PDF tools in one sleek workspace.</h1>
+        <p>Upload, convert, merge, compress, and edit PDFs with a modern experience inspired by top SaaS workflows. No forced login required.</p>
+        <div class="hero-actions">
+            <a class="cta-button" href="{{ url_for('tool_page', tool_name='unlock') }}">Start with Unlock</a>
+            <a class="ghost-button" href="#tools-grid">Browse tools</a>
         </div>
     </div>
 </section>

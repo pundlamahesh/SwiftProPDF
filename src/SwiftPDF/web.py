@@ -17,11 +17,14 @@ from SwiftPDF.auth import (
     admin_stats,
     authenticate_user,
     create_user,
+    create_user_session,
     create_user_with_role,
+    delete_user_session,
     delete_user,
     get_user,
     get_user_by_email,
     init_db,
+    is_user_session_active,
     list_audit_events,
     list_users,
     log_audit_event,
@@ -411,9 +414,30 @@ def create_app() -> Flask:
 
     def current_user():
         user_id = session.get("user_id")
+        session_token = session.get("session_token")
         if user_id is None:
             return None
+        if not session_token or not is_user_session_current(int(user_id), str(session_token)):
+            session.clear()
+            return None
         return get_user(app.config["DATABASE"], int(user_id))
+
+    def is_user_session_current(user_id: int, session_token: str) -> bool:
+        return is_user_session_active(app.config["DATABASE"], user_id, session_token)
+
+    def start_user_session(user_id: int) -> None:
+        session_token = uuid4().hex
+        create_user_session(
+            app.config["DATABASE"],
+            user_id,
+            session_token,
+            user_agent=request.headers.get("User-Agent", ""),
+            ip_address=get_request_ip(),
+        )
+        session.clear()
+        session["user_id"] = user_id
+        session["session_token"] = session_token
+        session.permanent = True
 
     def get_usage_limit() -> int:
         user = current_user()
@@ -725,9 +749,7 @@ def create_app() -> Flask:
                 **register_values(),
             ), 400
 
-        session.clear()
-        session["user_id"] = user_id
-        session.permanent = True
+        start_user_session(user_id)
         log_audit("register", f"Account registered for {email.strip().lower()}.", user_id)
         return redirect(url_for("index"))
 
@@ -747,9 +769,11 @@ def create_app() -> Flask:
             log_audit("login_failed", f"Failed login for {email}.")
             return render_template("login.html", error=str(exc), email=email), 400
 
-        session.clear()
-        session["user_id"] = user["id"]
-        session.permanent = True
+        try:
+            start_user_session(int(user["id"]))
+        except AuthError as exc:
+            log_audit("login_denied", str(exc), int(user["id"]))
+            return render_template("login.html", error=str(exc), email=email), 400
         log_audit("login", "User logged in.", int(user["id"]))
         return redirect(url_for("index"))
 
@@ -847,7 +871,11 @@ def create_app() -> Flask:
 
     @app.post("/logout")
     def logout():
+        user_id = session.get("user_id")
+        session_token = session.get("session_token")
         user = current_user()
+        if user_id and session_token:
+            delete_user_session(app.config["DATABASE"], int(user_id), str(session_token))
         if user:
             log_audit("logout", "User logged out.", int(user["id"]))
         session.clear()
