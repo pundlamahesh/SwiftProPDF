@@ -1,18 +1,22 @@
 <!doctype html>
 <html lang="en">
+
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}SwiftPDF — All your PDF tools in one place{% endblock %}</title>
-    <meta name="description" content="{% block meta_description %}A modern PDF toolkit for fast, secure conversions, editing, and file processing without mandatory login.{% endblock %}">
+    <meta name="description"
+        content="{% block meta_description %}A modern PDF toolkit for fast, secure conversions, editing, and file processing without mandatory login.{% endblock %}">
     <meta property="og:title" content="{% block og_title %}SwiftPDF — All your PDF tools in one place{% endblock %}">
-    <meta property="og:description" content="{% block og_description %}A modern PDF toolkit for fast, secure conversions, editing, and file processing without mandatory login.{% endblock %}">
+    <meta property="og:description"
+        content="{% block og_description %}A modern PDF toolkit for fast, secure conversions, editing, and file processing without mandatory login.{% endblock %}">
     <meta property="og:type" content="website">
     <meta property="og:url" content="{{ request.url }}">
     <meta property="og:image" content="{{ url_for('static', filename='logo.svg', _external=True) }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     {% block extra_head %}{% endblock %}
 </head>
+
 <body class="theme-light">
     <div class="site-shell">
         <header class="site-header">
@@ -50,7 +54,7 @@
                 <div class="header-actions">
                     {% if user %}
                     {% if user.is_admin %}
-                    <a href="{{ url_for('admin_dashboard') }}" class="ghost-button admin-top-link">Admin</a>
+                    <a href="{{ url_for('admin_dashboard') }}" class="ghost-button admin-top-link">👨‍💼 Admin</a>
                     {% endif %}
                     <span class="user-pill">Welcome {{ user.full_name }}</span>
                     <a href="{{ url_for('account') }}" class="ghost-button">Account</a>
@@ -61,7 +65,19 @@
                     <a href="{{ url_for('login') }}" class="ghost-button">Login</a>
                     <a href="{{ url_for('register') }}" class="cta-button">Sign Up</a>
                     {% endif %}
-                    <button class="theme-toggle" type="button" aria-label="Toggle dark mode">🌙</button>
+                    {% if user and user.is_admin %}
+                    <span class="admin-header-badge" title="SwiftPDF Administrator">👨‍💼</span>
+
+                    {% elif user and user.is_premium %}
+                    <span class="premium-header-badge" title="SwiftPDF Premium Member">👑</span>
+                    {% elif user and user.is_free %}
+                    <span class="free-header-badge" title="SwiftPDF Free Member">👤</span>
+
+                    {% else %}
+                    <button class="theme-toggle" type="button" aria-label="Toggle dark mode">
+                        🌙
+                    </button>
+                    {% endif %}
                 </div>
             </div>
         </header>
@@ -81,7 +97,9 @@
                 <div class="footer-links">
                     <a href="{{ url_for('about') }}">About</a>
                     <a href="{{ url_for('pricing') }}">Pricing</a>
+                    <a href="{{ url_for('faq') }}">FAQ</a>
                     <a href="{{ url_for('contact') }}">Contact</a>
+                    <a href="{{ url_for('guides') }}">Guides</a>
                     <a href="{{ url_for('privacy') }}">Privacy Policy</a>
                     <a href="{{ url_for('terms') }}">Terms</a>
                 </div>
@@ -92,4 +110,5 @@
     <script src="{{ url_for('static', filename='app.js') }}"></script>
     {% block extra_js %}{% endblock %}
 </body>
+
 </html>

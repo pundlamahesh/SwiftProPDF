@@ -39,7 +39,7 @@
             {% endif %}
             <div>
                 <dt>Last login</dt>
-                <dd>{{ user.last_login or 'Not available' }}</dd>
+                <dd>{{ user.last_login_at.replace('T', ' ')[:19] if user.last_login_at else 'Not available' }}</dd>
             </div>
             <div>
                 <dt>Security Questions Configured</dt>

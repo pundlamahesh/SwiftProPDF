@@ -1,10 +1,8 @@
-
 {% extends "base.html" %}
 
 {% block title %}About SwiftPDF{% endblock %}
 
 {% block content %}
-<div></div>
 <section class="about-hero">
     <div class="hero-panel-card">
 
@@ -22,6 +20,20 @@
 
     </div>
 </section>
+<section class="about-mission">
+    <div class="card">
+        <span class="eyebrow">OUR MISSION</span>
+
+        <h2>Making PDF Tools Accessible for Everyone</h2>
+
+        <p>
+            Our mission is simple: provide professional-quality PDF tools
+            that are fast, secure, affordable, and easy to use. We believe
+            users should not need expensive software or complex workflows
+            to manage their documents effectively.
+        </p>
+    </div>
+</section>
 
 <section class="about-story">
 
@@ -29,11 +41,13 @@
 
         <span class="eyebrow">OUR STORY</span>
 
-        <h2>Built by Developer, Powered by a Dream</h2>
+        <h2>Built withPassion, Powered by a Dream</h2>
 
         <p>
-            SwiftPDF was founded by a passionate Full Stack Developer with a simple vision to create software that is easy to use, 
-            affordable, and genuinely helpful for everyday users. Every feature is built with care to make document management simpler, 
+            SwiftPDF was founded by a passionate Full Stack Developer with a simple vision to create software that is
+            easy to use,
+            affordable, and genuinely helpful for everyday users. Every feature is built with care to make document
+            management simpler,
             faster, and more accessible for everyone.
 
         </p>
@@ -48,9 +62,9 @@
 
         <p>
             Instead of accepting the status quo, I decided to build something
-            different. SwiftPDF started as a side project between two
-            developers who wanted to create a modern document platform focused
-            on simplicity, performance, affordability, and user experience.
+            different. SwiftPDF started as a personal side project focused on
+            creating a modern document platform centered around simplicity,
+            performance, affordability, and user experience.
         </p>
 
         <p>
@@ -164,6 +178,29 @@
     </div>
 
 </section>
+<section class="about-contact">
+
+    <div class="card">
+
+        <span class="eyebrow">CONTACT</span>
+
+        <h2>Need Help?</h2>
+
+        <p>
+            Questions, feedback, or partnership inquiries?
+            Reach us at:
+        </p>
+
+        <p>
+            <strong>Email:</strong>
+            <a href="mailto:support@swiftpropdf.com">
+                support@swiftpropdf.com
+            </a>
+        </p>
+
+    </div>
+
+</section>
 
 <section class="about-cta">
 
@@ -176,8 +213,7 @@
             processing documents in seconds.
         </p>
 
-        <a href="{{ url_for('index') }}#tools-grid"
-           class="primary-action">
+        <a href="{{ url_for('index') }}#tools-grid" class="primary-action">
             Explore PDF Tools
         </a>
 

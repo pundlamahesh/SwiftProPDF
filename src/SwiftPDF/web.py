@@ -625,6 +625,19 @@ def create_app() -> Flask:
             tools=tools,
         )
 
+    @app.get("/faq")
+    def faq():
+        return render_template(
+            "faq.html",
+            tools=tools,
+        )
+    @app.get('/guides')
+    def guides():
+        return render_template(
+            'guides.html',
+            tools=tools,
+            )
+
     @app.get("/privacy")
     def privacy():
         return render_template(
