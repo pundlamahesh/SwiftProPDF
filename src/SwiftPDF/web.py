@@ -73,7 +73,8 @@ def load_env_file() -> None:
 def create_app() -> Flask:
     load_env_file()
     app = Flask(__name__)
-    app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024
+    max_upload_mb = int(os.getenv("MAX_UPLOAD_MB", "200"))
+    app.config["MAX_CONTENT_LENGTH"] = max_upload_mb * 1024 * 1024
     package_instance = Path(app.root_path) / "instance"
     legacy_instance = Path(app.root_path).parent / "instance"
     app.config["DATABASE"] = package_instance / "swiftpdf.sqlite3"

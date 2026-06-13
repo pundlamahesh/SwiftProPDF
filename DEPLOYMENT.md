@@ -66,7 +66,7 @@ server {
 server {
     listen 443 ssl;
     server_name pdf.example.com;
-    client_max_body_size 100M;
+    client_max_body_size 200M;
 
     location / {
         proxy_pass http://127.0.0.1:5000;
