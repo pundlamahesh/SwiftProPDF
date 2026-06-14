@@ -114,5 +114,6 @@ docker compose exec postgres pg_dump -U swiftpropdf swiftpropdf > swiftpropdf-ba
 - [ ] Nginx `client_max_body_size` at least 100M
 - [ ] Persistent PostgreSQL volume backed up
 - [ ] Redis/Celery worker healthy
+- [ ] ClamAV container healthy and `CLAMAV_ENABLED=1`
 - [ ] LibreOffice conversion tested
 - [ ] Login, registration, forgot password, admin user management, premium expiry editing, and PDF tools smoke-tested

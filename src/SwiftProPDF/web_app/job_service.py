@@ -8,6 +8,7 @@ from werkzeug.utils import secure_filename
 
 from SwiftProPDF.web_app.celery_app import celery_app
 from SwiftProPDF.web_app.tasks import process_tool_job
+from SwiftProPDF.security.file_scanner import save_and_scan_upload
 
 
 def async_tools_enabled() -> bool:
@@ -30,7 +31,7 @@ def save_request_files(files, input_dir: Path) -> dict[str, list[dict]]:
                 continue
             filename = secure_filename(uploaded_file.filename)
             input_path = input_dir / f"{len(saved[field_name]):02d}-{uuid4()}-{filename}"
-            uploaded_file.save(input_path)
+            save_and_scan_upload(uploaded_file, input_path)
             saved[field_name].append(
                 {
                     "filename": filename,

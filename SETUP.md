@@ -52,8 +52,19 @@ Important environment variables:
 - `DATABASE_URL`: PostgreSQL connection URL.
 - `REDIS_URL`: Redis connection URL for Celery.
 - `SWIFTPROPDF_ASYNC_TOOLS`: set to `1` to use Redis/Celery background processing.
+- `CLAMAV_ENABLED`: set to `1` to scan uploaded files with ClamAV before processing.
+- `CLAMAV_HOST` / `CLAMAV_PORT`: ClamAV daemon connection settings.
+
+Docker Compose starts ClamAV and enables scanning automatically. For local Python-only development, keep `CLAMAV_ENABLED=0` unless `clamd` is running on your machine.
 
 The app creates and migrates PostgreSQL tables automatically at startup when `DATABASE_URL` is set.
+SQLite fallback databases are migrated the same way when no PostgreSQL URL is configured.
+
+Manual migration command:
+
+```bash
+alembic upgrade head
+```
 
 ## First Run
 
@@ -69,6 +80,8 @@ The app creates and migrates PostgreSQL tables automatically at startup when `DA
 python -m pip install -e . pytest
 python -m pytest
 ```
+
+Tests cover database migrations, authentication/session behavior, and core PDF/image tools.
 
 ## Troubleshooting
 

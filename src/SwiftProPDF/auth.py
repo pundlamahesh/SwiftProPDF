@@ -4,7 +4,8 @@ from pathlib import Path
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from SwiftProPDF.database import DBIntegrityError, DBRow, connect, ensure_column
+from SwiftProPDF.database import DBIntegrityError, DBRow, connect
+from SwiftProPDF.migrations import run_migrations
 
 
 MAX_FAILED_LOGINS = 5
@@ -20,136 +21,9 @@ class AuthError(Exception):
 
 
 def init_db(database_path: Path) -> None:
+    run_migrations(database_path)
+
     with connect(database_path) as connection:
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                first_name TEXT NOT NULL DEFAULT '',
-                last_name TEXT NOT NULL DEFAULT '',
-                email TEXT NOT NULL UNIQUE,
-                password_hash TEXT NOT NULL,
-                role TEXT NOT NULL DEFAULT 'FREE',
-                plan_type TEXT NOT NULL DEFAULT 'FREE',
-                status TEXT NOT NULL DEFAULT 'ACTIVE',
-                failed_login_count INTEGER NOT NULL DEFAULT 0,
-                locked_until TEXT,
-                last_login_at TEXT,
-                quota_reset_at TEXT,
-                weekly_usage_count INTEGER NOT NULL DEFAULT 0,
-                lifetime_usage_count INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-        ensure_column(connection, "users", "first_name", "TEXT NOT NULL DEFAULT ''")
-        ensure_column(connection, "users", "last_name", "TEXT NOT NULL DEFAULT ''")
-        ensure_column(connection, "users", "role", "TEXT NOT NULL DEFAULT 'FREE'")
-        ensure_column(connection, "users", "plan_type", "TEXT NOT NULL DEFAULT 'FREE'")
-        ensure_column(connection, "users", "status", "TEXT NOT NULL DEFAULT 'ACTIVE'")
-        ensure_column(connection, "users", "failed_login_count", "INTEGER NOT NULL DEFAULT 0")
-        ensure_column(connection, "users", "locked_until", "TEXT")
-        ensure_column(connection, "users", "last_login_at", "TEXT")
-        ensure_column(connection, "users", "quota_reset_at", "TEXT")
-        ensure_column(connection, "users", "weekly_usage_count", "INTEGER NOT NULL DEFAULT 0")
-        ensure_column(connection, "users", "lifetime_usage_count", "INTEGER NOT NULL DEFAULT 0")
-        ensure_column(connection, "users", "premium_valid_from", "TEXT")
-        ensure_column(connection, "users", "premium_valid_until", "TEXT")
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS audit_events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                event_type TEXT NOT NULL,
-                details TEXT NOT NULL DEFAULT '',
-                ip_address TEXT NOT NULL DEFAULT '',
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY(user_id) REFERENCES users(id)
-            )
-            """
-        )
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS usage_tracking (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                anonymous_id TEXT,
-                ip_address TEXT NOT NULL DEFAULT '',
-                tool_name TEXT NOT NULL,
-                usage_date TEXT NOT NULL,
-                usage_week TEXT NOT NULL,
-                execution_count INTEGER NOT NULL DEFAULT 0,
-                last_execution_at TEXT,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY(user_id) REFERENCES users(id)
-            )
-            """
-        )
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS user_security_questions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL UNIQUE,
-                date_of_birth_hash TEXT NOT NULL,
-                current_city_hash TEXT NOT NULL,
-                failed_reset_attempts INTEGER NOT NULL DEFAULT 0,
-                reset_locked_until TEXT,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY(user_id) REFERENCES users(id)
-            )
-            """
-        )
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS user_sessions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                session_token TEXT NOT NULL UNIQUE,
-                user_agent TEXT NOT NULL DEFAULT '',
-                ip_address TEXT NOT NULL DEFAULT '',
-                created_at TEXT NOT NULL,
-                last_seen_at TEXT NOT NULL,
-                expires_at TEXT NOT NULL,
-                FOREIGN KEY(user_id) REFERENCES users(id)
-            )
-            """
-        )
-        ensure_column(connection, "user_security_questions", "failed_reset_attempts", "INTEGER NOT NULL DEFAULT 0")
-        ensure_column(connection, "user_security_questions", "reset_locked_until", "TEXT")
-        ensure_column(connection, "usage_tracking", "usage_date", "TEXT NOT NULL")
-        ensure_column(connection, "usage_tracking", "usage_week", "TEXT NOT NULL")
-        connection.execute(
-            """
-            CREATE INDEX IF NOT EXISTS user_sessions_user_expires_idx
-            ON user_sessions(user_id, expires_at)
-            """
-        )
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS settings (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL
-            )
-            """
-        )
-        connection.execute("DROP INDEX IF EXISTS usage_tracking_user_tool_idx")
-        connection.execute("DROP INDEX IF EXISTS usage_tracking_guest_tool_idx")
-        connection.execute(
-            """
-            CREATE UNIQUE INDEX IF NOT EXISTS usage_tracking_user_tool_week_idx
-            ON usage_tracking(user_id, tool_name, usage_week)
-            WHERE user_id IS NOT NULL
-            """
-        )
-        connection.execute(
-            """
-            CREATE UNIQUE INDEX IF NOT EXISTS usage_tracking_guest_tool_week_idx
-            ON usage_tracking(anonymous_id, ip_address, tool_name, usage_week)
-            WHERE user_id IS NULL
-            """
-        )
         connection.execute("UPDATE users SET role = UPPER(role) WHERE role IS NOT NULL")
         connection.execute("UPDATE users SET plan_type = UPPER(plan_type) WHERE plan_type IS NOT NULL")
         connection.execute("UPDATE users SET role = 'FREE' WHERE role NOT IN ('ADMIN', 'PREMIUM', 'FREE')")

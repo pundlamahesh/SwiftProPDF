@@ -1,4 +1,6 @@
 # SwiftProPDF Complete Requirements
+alembic>=1.13.0
+clamd>=1.0.2
 # Install with: pip install -r requirements-full.txt
 
 # Core Dependencies

@@ -100,6 +100,28 @@ SWIFTPROPDF_COOKIE_SECURE=1
 
 The app uses PostgreSQL when `DATABASE_URL` is set. Docker Compose starts a PostgreSQL service automatically and points both the web app and Celery worker at it. If `DATABASE_URL` is not set, the auth layer can still fall back to SQLite for lightweight local tests.
 
+## Antivirus Scanning
+
+SwiftProPDF can scan uploaded files with ClamAV before PDF, image, or Office parsers process them.
+
+```env
+CLAMAV_ENABLED=1
+CLAMAV_HOST=clamav
+CLAMAV_PORT=3310
+```
+
+Docker Compose starts a `clamav` service and enables scanning for both the web app and Celery worker. For local non-Docker development, keep `CLAMAV_ENABLED=0` unless you have `clamd` running locally.
+
+## Database Migrations
+
+SwiftProPDF uses Alembic migrations for schema creation and upgrades. Startup calls `init_db`, which applies migrations automatically before seeding settings and normalizing existing user data.
+
+Manual migration command:
+
+```bash
+alembic upgrade head
+```
+
 ## Docker
 
 Build and run:
@@ -108,7 +130,7 @@ Build and run:
 docker compose up --build
 ```
 
-The app listens on `http://localhost:8000`. The compose file starts the web app, PostgreSQL, Redis, and a Celery worker. PostgreSQL data is persisted with the `swiftpropdf-postgres` volume; generated background-job files are persisted with the `swiftpropdf-instance` volume.
+The app listens on `http://localhost:8000`. The compose file starts the web app, PostgreSQL, Redis, ClamAV, and a Celery worker. PostgreSQL data is persisted with the `swiftpropdf-postgres` volume; generated background-job files are persisted with the `swiftpropdf-instance` volume.
 
 ## Background Processing
 
@@ -161,6 +183,8 @@ python -m pip install -e . pytest
 python -m pytest
 ```
 
+The test suite covers schema migration startup, auth/session behavior, and deterministic PDF/image tool operations.
+
 ## Project Structure
 
 ```text
@@ -174,7 +198,8 @@ src/SwiftProPDF/
   web_app/         Flask app factory, web configuration, and tool catalog
   static/          Organized CSS, JavaScript, and image assets
   templates/       Grouped HTML templates by feature area
-tests/             Core, CLI, and auth tests
+migrations/        Alembic database migrations
+tests/             Core, migration, CLI, and auth tests
 ```
 ## Email Config
 

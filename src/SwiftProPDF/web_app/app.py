@@ -55,6 +55,7 @@ from SwiftProPDF.core import (
     PdfEditError, QrCodeError, generate_qr_code, rotate_pdf_pages, delete_pdf_pages,
 )
 from SwiftProPDF.database import using_postgres
+from SwiftProPDF.security.file_scanner import FileScanError, save_and_scan_upload
 from SwiftProPDF.web_app.job_service import async_tools_enabled, enqueue_tool_job, job_result, jobs_root
 from SwiftProPDF.web_app.tool_catalog import TOOLS, TOOLS_BY_PATH, TOOL_BY_POST_PATH, TOOL_PATHS
 
@@ -324,6 +325,10 @@ def create_app() -> Flask:
     def handle_upload_too_large(exc):
         max_size_mb = max(1, app.config["MAX_CONTENT_LENGTH"] // (1024 * 1024))
         return error_response(f"File is too large. Upload files up to {max_size_mb} MB.", 413)
+
+    @app.errorhandler(FileScanError)
+    def handle_file_scan_error(exc):
+        return error_response(str(exc), 400)
 
     @app.errorhandler(HTTPException)
     def handle_http_exception(exc):
@@ -898,7 +903,7 @@ def create_app() -> Flask:
         input_path = work_dir / f"{uuid4()}-{filename}"
         output_name = f"{Path(filename).stem}-unlocked.pdf"
         output_path = work_dir / output_name
-        uploaded_file.save(input_path)
+        save_and_scan_upload(uploaded_file, input_path)
 
         try:
             unlock_pdf(input_path, output_path, password, overwrite=True)
@@ -934,7 +939,7 @@ def create_app() -> Flask:
         input_path = work_dir / f"{uuid4()}-{filename}"
         output_name = f"{Path(filename).stem}-locked.pdf"
         output_path = work_dir / output_name
-        uploaded_file.save(input_path)
+        save_and_scan_upload(uploaded_file, input_path)
 
         try:
             lock_pdf(input_path, output_path, password=password, overwrite=True)
@@ -967,7 +972,7 @@ def create_app() -> Flask:
         input_path = work_dir / f"{uuid4()}-{filename}"
         output_name = f"{Path(filename).stem}-split.pdf"
         output_path = work_dir / output_name
-        uploaded_file.save(input_path)
+        save_and_scan_upload(uploaded_file, input_path)
 
         try:
             split_pdf(input_path, output_path, page_ranges, overwrite=True)
@@ -1005,7 +1010,7 @@ def create_app() -> Flask:
                     return error_response("Only PDF files are supported.", 400)
                 
                 input_path = work_dir / f"{idx:02d}-{uuid4()}-{filename}"
-                uploaded_file.save(input_path)
+                save_and_scan_upload(uploaded_file, input_path)
                 input_paths.append(input_path)
             
             if not input_paths:
@@ -1019,6 +1024,9 @@ def create_app() -> Flask:
             log_audit("tool_merge", f"Merged {len(input_paths)} PDF file(s).")
             track_tool_usage("merge")
         except PdfMergeError as exc:
+            shutil.rmtree(work_dir, ignore_errors=True)
+            return error_response(str(exc), 400)
+        except FileScanError as exc:
             shutil.rmtree(work_dir, ignore_errors=True)
             return error_response(str(exc), 400)
         except Exception as exc:
@@ -1051,7 +1059,7 @@ def create_app() -> Flask:
         input_path = work_dir / f"{uuid4()}-{filename}"
         output_name = f"{Path(filename).stem}-compressed.pdf"
         output_path = work_dir / output_name
-        uploaded_file.save(input_path)
+        save_and_scan_upload(uploaded_file, input_path)
         
         try:
             compress_pdf(input_path, output_path, level=level, overwrite=True)
@@ -1087,7 +1095,7 @@ def create_app() -> Flask:
         input_path = work_dir / f"{uuid4()}-{filename}"
         output_name = f"{Path(filename).stem}-compressed{suffix}"
         output_path = work_dir / output_name
-        uploaded_file.save(input_path)
+        save_and_scan_upload(uploaded_file, input_path)
 
         try:
             compress_image(input_path, output_path, level=level, overwrite=True)
@@ -1125,7 +1133,7 @@ def create_app() -> Flask:
         work_dir = Path(tempfile.mkdtemp(prefix="swiftpropdf-pdf2img-"))
         input_path = work_dir / f"{uuid4()}-{filename}"
         images_dir = work_dir / "images"
-        uploaded_file.save(input_path)
+        save_and_scan_upload(uploaded_file, input_path)
         
         try:
             pdf_to_images(input_path, images_dir, dpi=dpi)
@@ -1172,7 +1180,7 @@ def create_app() -> Flask:
                     return error_response("Only image files are supported (JPG, PNG, GIF, BMP).", 400)
                 
                 input_path = work_dir / f"{idx:02d}-{uuid4()}-{filename}"
-                uploaded_file.save(input_path)
+                save_and_scan_upload(uploaded_file, input_path)
                 input_paths.append(input_path)
             
             if not input_paths:
@@ -1211,7 +1219,7 @@ def create_app() -> Flask:
         input_path = work_dir / f"{uuid4()}-{filename}"
         output_name = f"{Path(filename).stem}.docx"
         output_path = work_dir / output_name
-        uploaded_file.save(input_path)
+        save_and_scan_upload(uploaded_file, input_path)
         
         try:
             pdf_to_word(input_path, output_path, overwrite=True)
@@ -1242,7 +1250,7 @@ def create_app() -> Flask:
         input_path = work_dir / f"{uuid4()}-{filename}"
         output_name = f"{Path(filename).stem}.pptx"
         output_path = work_dir / output_name
-        uploaded_file.save(input_path)
+        save_and_scan_upload(uploaded_file, input_path)
         
         try:
             pdf_to_powerpoint(input_path, output_path, overwrite=True)
@@ -1273,7 +1281,7 @@ def create_app() -> Flask:
         input_path = work_dir / f"{uuid4()}-{filename}"
         output_name = f"{Path(filename).stem}.xlsx"
         output_path = work_dir / output_name
-        uploaded_file.save(input_path)
+        save_and_scan_upload(uploaded_file, input_path)
         
         try:
             pdf_to_excel(input_path, output_path, overwrite=True)
@@ -1305,7 +1313,7 @@ def create_app() -> Flask:
         input_path = work_dir / f"{uuid4()}-{filename}"
         output_name = f"{Path(filename).stem}.pdf"
         output_path = work_dir / output_name
-        uploaded_file.save(input_path)
+        save_and_scan_upload(uploaded_file, input_path)
         
         try:
             office_to_pdf(input_path, output_path, overwrite=True)
@@ -1378,7 +1386,7 @@ def create_app() -> Flask:
         input_path = work_dir / f"{uuid4()}-{filename}"
         output_name = f"{Path(filename).stem}-rotated.pdf"
         output_path = work_dir / output_name
-        uploaded_file.save(input_path)
+        save_and_scan_upload(uploaded_file, input_path)
         
         try:
             rotate_pdf_pages(input_path, output_path, page_ranges, angle, overwrite=True)
@@ -1410,7 +1418,7 @@ def create_app() -> Flask:
         input_path = work_dir / f"{uuid4()}-{filename}"
         output_name = f"{Path(filename).stem}-pages-deleted.pdf"
         output_path = work_dir / output_name
-        uploaded_file.save(input_path)
+        save_and_scan_upload(uploaded_file, input_path)
         
         try:
             delete_pdf_pages(input_path, output_path, page_ranges, overwrite=True)

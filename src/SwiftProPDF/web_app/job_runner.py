@@ -29,6 +29,7 @@ from SwiftProPDF.core import (
     split_pdf,
     unlock_pdf,
 )
+from SwiftProPDF.security.file_scanner import FileScanError, scan_file
 
 
 class ToolJobError(Exception):
@@ -73,6 +74,12 @@ def output_result(output_path: Path, download_name: str) -> dict:
     }
 
 
+def scan_job_files(files: dict) -> None:
+    for uploads in files.values():
+        for upload in uploads:
+            scan_file(upload["path"])
+
+
 def execute_tool_job(
     tool_name: str,
     form: dict,
@@ -86,6 +93,8 @@ def execute_tool_job(
     database = Path(database_path)
 
     try:
+        scan_job_files(files)
+
         if tool_name == "unlock":
             upload = require_file(files, "pdf")
             filename = upload["filename"]
@@ -293,6 +302,7 @@ def execute_tool_job(
 
         raise ToolJobError("Unknown PDF tool.")
     except (
+        FileScanError,
         ImageConversionError,
         OfficeConversionError,
         PdfCompressError,
