@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Setup SwiftPDF Docker Server
+      - name: Setup SwiftProPDF Docker Server
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -47,20 +47,20 @@ jobs:
             sudo usermod -aG docker ubuntu || true
 
             echo "Cloning repository..."
-            if [ ! -d "$HOME/SwiftPDF" ]; then
+            if [ ! -d "$HOME/SwiftProPDF" ]; then
               git clone -b docker-migration \
-                https://github.com/pundlamahesh/SwiftPDF.git \
-                "$HOME/SwiftPDF"
+                https://github.com/pundlamahesh/SwiftProPDF.git \
+                "$HOME/SwiftProPDF"
             fi
 
-            cd "$HOME/SwiftPDF"
+            cd "$HOME/SwiftProPDF"
 
             git fetch origin
             git reset --hard origin/docker-migration
 
             echo "Creating .env file..."
 
-            cat > "$HOME/SwiftPDF/.env" << EOF
+            cat > "$HOME/SwiftProPDF/.env" << EOF
             SECRET_KEY=${{ secrets.SECRET_KEY }}
             SMTP_SERVER=${{ secrets.SMTP_SERVER }}
             SMTP_PORT=${{ secrets.SMTP_PORT }}
@@ -72,12 +72,12 @@ jobs:
             echo "Configuring Nginx..."
 
             sudo cp \
-              "$HOME/SwiftPDF/deploy/nginx.conf" \
-              /etc/nginx/sites-available/swiftpdf
+              "$HOME/SwiftProPDF/deploy/nginx.conf" \
+              /etc/nginx/sites-available/swiftpropdf
 
             sudo ln -sf \
-              /etc/nginx/sites-available/swiftpdf \
-              /etc/nginx/sites-enabled/swiftpdf
+              /etc/nginx/sites-available/swiftpropdf \
+              /etc/nginx/sites-enabled/swiftpropdf
 
             sudo rm -f /etc/nginx/sites-enabled/default
 

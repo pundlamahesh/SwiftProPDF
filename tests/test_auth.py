@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from SwiftPDF.auth import (
+from SwiftProPDF.auth import (
     AuthError,
     create_user,
     create_user_session,

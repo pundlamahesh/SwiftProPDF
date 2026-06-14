@@ -1,4 +1,4 @@
-# SwiftPDF Complete Requirements
+# SwiftProPDF Complete Requirements
 # Install with: pip install -r requirements-full.txt
 
 # Core Dependencies
@@ -9,6 +9,9 @@ pip>=23.0
 # Web Framework
 Flask>=3.0.0
 Werkzeug>=3.0.0
+celery[redis]>=5.3.0
+redis>=5.0.0
+psycopg[binary]>=3.1.0
 
 # Authentication & Security
 cryptography>=3.1

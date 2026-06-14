@@ -1,0 +1,180 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Pricing - SwiftProPDF{% endblock %}
+
+{% block content %}
+
+<section class="pricing-section">
+
+    <div class="pricing-header">
+        <span class="eyebrow">Simple Pricing</span>
+
+        <h1>Choose the plan that's right for you</h1>
+
+        <p>
+            Start free and upgrade anytime for unlimited access to all SwiftProPDF tools.
+        </p>
+    </div>
+
+    <div class="pricing-grid">
+
+        <!-- Guest Plan -->
+        <div class="pricing-card">
+
+            <div class="plan-badge">Guest</div>
+
+            <h2>Free Visitor</h2>
+
+            <div class="price">
+                ₹0
+                <span>/ forever</span>
+            </div>
+
+            <ul>
+                <li>✓ No registration required</li>
+                <li>✓ 5 document actions per week</li>
+                <li>✓ Access to all PDF tools</li>
+                <li>✓ Secure file processing</li>
+                <li>✓ Mobile-friendly experience</li>
+            </ul>
+
+            <a href="{{ url_for('register') }}" class="pricing-btn secondary">
+                Get Started
+            </a>
+
+        </div>
+
+        <!-- Registered Plan -->
+        <div class="pricing-card">
+
+            <div class="plan-badge">Popular</div>
+
+            <h2>Registered User</h2>
+
+            <div class="price">
+                ₹0
+                <span>/ forever</span>
+            </div>
+
+            <ul>
+                <li>✓ Free account</li>
+                <li>✓ 10 document actions per week</li>
+                <li>✓ Usage tracking</li>
+                <li>✓ Faster support response</li>
+                <li>✓ Access to future free features</li>
+            </ul>
+
+            <a href="{{ url_for('register') }}" class="pricing-btn">
+                Create Free Account
+            </a>
+
+        </div>
+
+        <!-- Business Plan -->
+        <div class="pricing-card">
+
+            <div class="plan-badge">Business</div>
+
+            <h2>Business Plan</h2>
+
+            <div class="price">
+                ₹1499
+                <span>/ year</span>
+            </div>
+
+            <p class="price-note">
+                Best for teams and small businesses
+            </p>
+
+            <ul>
+                <li>✓ Up to 5 team members</li>
+                <li>✓ Unlimited document actions</li>
+                <li>✓ Team collaboration tools</li>
+                <li>✓ Priority email support</li>
+                <li>✓ Advanced export options</li>
+            </ul>
+
+            <a href="{{ url_for('contact') }}" class="pricing-btn">
+                Contact Sales
+            </a>
+
+        </div>
+
+        <!-- Premium Plan -->
+        <div class="pricing-card featured">
+
+            <div class="plan-badge premium">
+                ⭐ Best Value
+            </div>
+
+            <h2>SwiftProPDF Premium</h2>
+
+            <div class="price">
+                ₹499
+                <span>/ year</span>
+            </div>
+
+            <p class="price-note">
+                Less than ₹1.40 per day
+            </p>
+
+            <ul>
+                <li>✓ Unlimited document actions</li>
+                <li>✓ Unlimited PDF conversions</li>
+                <li>✓ Unlimited compression & editing</li>
+                <li>✓ Priority support</li>
+                <li>✓ Early access to new tools</li>
+                <li>✓ Best value for professionals</li>
+            </ul>
+
+            <a href="{{ url_for('contact') }}" class="pricing-btn premium-btn">
+                Upgrade to Premium
+            </a>
+
+        </div>
+
+    </div>
+
+    <div class="pricing-footer">
+
+        <h3>Included with Every Plan</h3>
+        <div class="pricing-policy-card">
+            <h3>Refund Policy</h3>
+
+            <p>
+                Premium subscriptions are generally non-refundable once activated.
+                However, refund requests may be considered for duplicate payments,
+                accidental overpayments, or technical issues that prevent access to
+                premium features and cannot be resolved within a reasonable time.
+            </p>
+
+            <p>
+                Refund requests must be submitted within 7 days of payment by
+                contacting <a href="mailto:support@swiftpropdf.com">support@swiftpropdf.com</a>
+                and providing payment details and the reason for the request.
+            </p>
+
+            <p>
+                Refund decisions are reviewed on a case-by-case basis. SwiftProPDF
+                reserves the right to deny refund requests involving misuse,
+                abuse, or violations of our Terms of Service.
+            </p>
+
+        </div>
+
+        <div class="pricing-features">
+
+            <div>🔒 Secure file handling</div>
+            <div>⚡ Fast processing</div>
+            <div>📱 Mobile friendly</div>
+            <div>☁️ No software installation</div>
+            <div>📄 15+ PDF tools</div>
+            <div>💾 Instant downloads</div>
+
+        </div>
+
+    </div>
+
+</section>
+
+{% endblock %}

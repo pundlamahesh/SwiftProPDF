@@ -1,4 +1,4 @@
-# SwiftPDF Setup
+# SwiftProPDF Setup
 
 ## Requirements
 
@@ -10,7 +10,7 @@
 
 ```bash
 git clone <repository-url>
-cd SwiftPDF
+cd SwiftProPDF
 python -m venv .venv
 ```
 
@@ -20,7 +20,7 @@ Windows PowerShell:
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip setuptools wheel
 python -m pip install -e .
-swiftpdf-ui
+swiftpropdf-ui
 ```
 
 macOS/Linux:
@@ -29,7 +29,7 @@ macOS/Linux:
 source .venv/bin/activate
 python -m pip install --upgrade pip setuptools wheel
 python -m pip install -e .
-swiftpdf-ui
+swiftpropdf-ui
 ```
 
 Open `http://127.0.0.1:5000`.
@@ -45,12 +45,15 @@ Open `http://127.0.0.1:5000`.
 
 ## Configuration
 
-Only these environment variables are currently used by the app:
+Important environment variables:
 
-- `SWIFTPDF_SECRET_KEY`: Flask session signing secret.
-- `SWIFTPDF_COOKIE_SECURE`: set to `1` when served over HTTPS.
+- `SWIFTPROPDF_SECRET_KEY`: Flask session signing secret.
+- `SWIFTPROPDF_COOKIE_SECURE`: set to `1` when served over HTTPS.
+- `DATABASE_URL`: PostgreSQL connection URL.
+- `REDIS_URL`: Redis connection URL for Celery.
+- `SWIFTPROPDF_ASYNC_TOOLS`: set to `1` to use Redis/Celery background processing.
 
-The app creates and migrates SQLite automatically at startup.
+The app creates and migrates PostgreSQL tables automatically at startup when `DATABASE_URL` is set.
 
 ## First Run
 
@@ -70,6 +73,6 @@ python -m pytest
 ## Troubleshooting
 
 - LibreOffice conversion errors: install LibreOffice and verify `libreoffice --version`.
-- Port 5000 already in use: stop the existing process or run `swiftpdf-ui --port 8001`.
+- Port 5000 already in use: stop the existing process or run `swiftpropdf-ui --port 8001`.
 - Forgot Password unavailable for existing accounts: sign in and configure Security Questions in Account Settings.
 - Premium expiry not shown: verify the user role is Premium and the Premium Valid Until date is set in Admin edit mode.

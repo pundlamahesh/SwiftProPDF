@@ -1,4 +1,4 @@
-# SwiftPDF Quick Start Guide
+# SwiftProPDF Quick Start Guide
 
 ## 5-Minute Setup
 
@@ -6,7 +6,7 @@
 
 ```powershell
 # 1. Navigate to project directory
-cd C:\SwiftPDF
+cd C:\SwiftProPDF
 
 # 2. Create virtual environment
 python -m venv .venv
@@ -18,7 +18,7 @@ python -m venv .venv
 pip install -e .
 
 # 5. Start the application
-swiftpdf-ui
+swiftpropdf-ui
 ```
 
 Visit: http://127.0.0.1:5000
@@ -27,7 +27,7 @@ Visit: http://127.0.0.1:5000
 
 ```bash
 # 1. Navigate to project directory
-cd ~/SwiftPDF
+cd ~/SwiftProPDF
 
 # 2. Create virtual environment
 python3 -m venv .venv
@@ -39,7 +39,7 @@ source .venv/bin/activate
 pip install -e .
 
 # 5. Start the application
-swiftpdf-ui
+swiftpropdf-ui
 ```
 
 Visit: http://127.0.0.1:5000
@@ -94,7 +94,7 @@ pip install -e .
 ### "Port 5000 already in use"
 ```bash
 # Use different port
-swiftpdf-ui --port 8000
+swiftpropdf-ui --port 8000
 ```
 
 Visit: http://127.0.0.1:8000
@@ -110,7 +110,7 @@ Visit: http://127.0.0.1:8000
 
 ### "Permission denied" (Mac/Linux)
 ```bash
-chmod +x .venv/bin/swiftpdf-ui
+chmod +x .venv/bin/swiftpropdf-ui
 ```
 
 ## Next Steps
@@ -125,19 +125,19 @@ chmod +x .venv/bin/swiftpdf-ui
 
 ### Unlock a PDF via CLI
 ```bash
-swiftpdf locked.pdf -o unlocked.pdf
+swiftpropdf locked.pdf -o unlocked.pdf
 ```
 
 ### Split a PDF via CLI
 ```bash
-swiftpdf input.pdf -o output.pdf --pages 1-5,10-15
+swiftpropdf input.pdf -o output.pdf --pages 1-5,10-15
 ```
 
 ### Batch Processing
 Run multiple operations:
 ```bash
 for file in *.pdf; do
-  swiftpdf "$file" -o "unlocked_$file"
+  swiftpropdf "$file" -o "unlocked_$file"
 done
 ```
 
@@ -146,9 +146,9 @@ done
 ### Environment Variables
 Create `.env` file:
 ```
-SWIFTPDF_SECRET_KEY=your-secret-key
+SWIFTPROPDF_SECRET_KEY=your-secret-key
 MAX_CONTENT_LENGTH=104857600
-TEMP_DIR=/tmp/swiftpdf
+TEMP_DIR=/tmp/swiftpropdf
 ```
 
 See `.env.example` for all options.
@@ -157,8 +157,8 @@ See `.env.example` for all options.
 
 ### Quick Docker Run
 ```bash
-docker build -t swiftpdf .
-docker run -p 5000:5000 swiftpdf
+docker build -t swiftpropdf .
+docker run -p 8000:8000 swiftpropdf
 ```
 
 ### Docker Compose
@@ -171,7 +171,7 @@ docker-compose up -d
 ### Check Logs
 ```bash
 # Recent errors
-tail -f logs/swiftpdf.log
+tail -f logs/swiftpropdf.log
 ```
 
 ### Debug Mode
@@ -181,7 +181,7 @@ export FLASK_ENV=development
 export FLASK_DEBUG=1
 
 # Run application
-swiftpdf-ui
+swiftpropdf-ui
 ```
 
 ### Test Features
@@ -260,6 +260,6 @@ See LICENSE file for licensing information.
 
 **Ready to get started?**
 
-Run: `swiftpdf-ui` and visit http://127.0.0.1:5000
+Run: `swiftpropdf-ui` and visit http://127.0.0.1:5000
 
-Enjoy SwiftPDF! 🚀
+Enjoy SwiftProPDF! 🚀

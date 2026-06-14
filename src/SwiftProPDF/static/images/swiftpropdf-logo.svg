@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 270 60" width="270" height="60">
+  <defs>
+    <linearGradient id="iconGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#246BFD"/>
+      <stop offset="100%" style="stop-color:#0FA0CE"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Icon background -->
+  <rect x="0" y="4" width="52" height="52" rx="12" fill="url(#iconGrad)"/>
+
+  <!-- Document body -->
+  <path d="M13 14h16l10 10v18a2 2 0 01-2 2H13a2 2 0 01-2-2V16a2 2 0 012-2z" fill="white" opacity="0.2"/>
+
+  <!-- Folded corner -->
+  <path d="M29 14l10 10h-8a2 2 0 01-2-2V14z" fill="white"/>
+
+  <!-- Lines on doc -->
+  <path d="M16 34h18M16 39h12" stroke="white" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- Arrow (swift symbol) -->
+  <path d="M22 26l4 4-4 4" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>
+
+  <!-- Wordmark -->
+  <text x="64" y="38" font-family="'Sora','Segoe UI',Arial,sans-serif" font-weight="700" font-size="26" letter-spacing="0" fill="#0F1117">SwiftPro</text>
+  <text x="176" y="38" font-family="'Sora','Segoe UI',Arial,sans-serif" font-weight="700" font-size="26" letter-spacing="0" fill="#246BFD">PDF</text>
+</svg>

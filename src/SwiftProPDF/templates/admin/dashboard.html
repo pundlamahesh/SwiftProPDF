@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Admin | SwiftProPDF</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css', v='9') }}">
+</head>
+<body class="admin-body">
+    <!-- admin-ui-version: 9 -->
+    <main class="admin-page">
+        <aside class="admin-sidebar" id="admin-sidebar" aria-label="Admin navigation">
+            <div class="sidebar-brand">
+                <img src="{{ url_for('static', filename='images/logo.svg') }}" alt="SwiftProPDF logo" class="sidebar-logo">
+                <div>
+                    <p class="eyebrow sidebar-brand-label">SwiftProPDF</p>
+                    <strong class="sidebar-brand-title">Admin Console</strong>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav" aria-label="Admin menu">
+                <a class="sidebar-link active" href="#dashboard">Dashboard</a>
+                <a class="sidebar-link" href="#users">Users</a>
+                <a class="sidebar-link" href="#analytics">Usage Analytics</a>
+                <a class="sidebar-link" href="#tools">Tools</a>
+                <a class="sidebar-link" href="#subscriptions">Subscriptions</a>
+                <a class="sidebar-link" href="#settings">Settings</a>
+                <a class="sidebar-link" href="#logs">System Logs</a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <a class="sidebar-link sidebar-link--ghost" href="{{ url_for('account') }}">Profile</a>
+                <form action="{{ url_for('logout') }}" method="post">
+                    <button class="sidebar-link sidebar-link--action" type="submit">Logout</button>
+                </form>
+            </div>
+        </aside>
+
+        <div class="admin-main">
+            <header class="admin-topbar">
+                <a class="button button--secondary admin-home-link" href="{{ url_for('index') }}"><span aria-hidden="true">&larr;</span> Back To Home</a>
+                <button class="sidebar-toggle" type="button" aria-controls="admin-sidebar" aria-expanded="false">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+
+                <div class="topbar-heading">
+                    <p class="eyebrow">Control Center</p>
+                    <h1>Admin Dashboard</h1>
+                </div>
+
+                <div class="topbar-actions">
+                    <div class="topbar-search">
+                        <label class="sr-only" for="admin-search-input">Search users</label>
+                        <input id="admin-search-input" class="field field--search" type="search" placeholder="Search users, email, or role" data-admin-table-search>
+                    </div>
+                    <button class="icon-button" type="button" aria-label="Notifications">🔔</button>
+                    <button class="icon-button theme-toggle" type="button" aria-label="Toggle theme">🌙</button>
+                    <a class="profile-pill" href="{{ url_for('account') }}" aria-label="Admin profile">
+                        <span>{{ user.full_name }}</span>
+                    </a>
+                    <form class="topbar-logout-form" action="{{ url_for('logout') }}" method="post">
+                        <button class="button button--ghost" type="submit">Logout</button>
+                    </form>
+                </div>
+            </header>
+
+            <section class="admin-hero" id="dashboard">
+                <div class="admin-hero-grid">
+                    <article class="metric-card">
+                        <div class="metric-card__icon">👥</div>
+                        <div>
+                            <p class="metric-card__label">Total users</p>
+                            <strong class="metric-card__value">{{ stats.total_users }}</strong>
+                            <p class="metric-card__meta">All active accounts in your workspace.</p>
+                        </div>
+                    </article>
+                    <article class="metric-card">
+                        <div class="metric-card__icon">⭐</div>
+                        <div>
+                            <p class="metric-card__label">Premium users</p>
+                            <strong class="metric-card__value">{{ premium_users }}</strong>
+                            <p class="metric-card__meta">Current premium subscribers.</p>
+                        </div>
+                    </article>
+                    <article class="metric-card">
+                        <div class="metric-card__icon">⚡</div>
+                        <div>
+                            <p class="metric-card__label">Weekly conversions</p>
+                            <strong class="metric-card__value">{{ weekly_conversions }}</strong>
+                            <p class="metric-card__meta">Conversions performed this week.</p>
+                        </div>
+                    </article>
+                    <article class="metric-card">
+                        <div class="metric-card__icon">🛡️</div>
+                        <div>
+                            <p class="metric-card__label">Audit events</p>
+                            <strong class="metric-card__value">{{ stats.audit_events }}</strong>
+                            <p class="metric-card__meta">Recent security and admin actions.</p>
+                        </div>
+                    </article>
+                </div>
+            </section>
+
+            <section class="admin-panel-grid" id="analytics">
+                <article class="panel card">
+                    <div class="panel-header">
+                        <div>
+                            <p class="panel-label">Quick actions</p>
+                            <h2 class="panel-title">Administration</h2>
+                        </div>
+                        <span class="badge badge--soft">Overview</span>
+                    </div>
+                    <p class="panel-copy">Run important workflows without leaving the dashboard.</p>
+                    <div class="panel-actions">
+                        <a class="button button--secondary" href="#users">Manage users</a>
+                        <a class="button button--secondary" href="#logs">View logs</a>
+                    </div>
+                </article>
+                <article class="panel card" id="tools">
+                    <div class="panel-header">
+                        <div>
+                            <p class="panel-label">Plan health</p>
+                            <h2 class="panel-title">Billing &amp; limits</h2>
+                        </div>
+                        <span class="badge badge--soft">Policies</span>
+                    </div>
+                    <p class="panel-copy">Monitor plan status and weekly quota thresholds.</p>
+                    <div class="panel-actions">
+                        <span class="badge badge--success">Premium live</span>
+                        <span class="badge badge--neutral">No issues</span>
+                    </div>
+                </article>
+            </section>
+
+            <section class="admin-section" id="users">
+                <div class="section-heading">
+                    <div>
+                        <p class="section-kicker">Access</p>
+                        <h2>User management</h2>
+                    </div>
+                    <div class="section-actions">
+                        <a class="button button--secondary" href="#settings">Settings</a>
+                    </div>
+                </div>
+                {% if error %}
+                <div class="toast toast--error" role="alert">{{ error }}</div>
+                {% endif %}
+                {% if success %}
+                <div class="toast toast--success" role="status">{{ success }}</div>
+                {% endif %}
+
+                <div class="card card--split">
+                    <div class="card-section">
+                        <h3 class="card-title">Add / Edit User</h3>
+                        <p class="card-copy">Add a new account or update the selected user without leaving this page.</p>
+                        <p class="editing-summary" data-editing-summary hidden>
+                            Currently Editing: <strong data-editing-name></strong> (<a data-editing-email href="#"></a>)
+                        </p>
+                        <p class="selected-user-summary" data-selected-user-summary hidden>
+                            Selected User: <strong data-selected-user-name></strong>
+                        </p>
+                        <form class="admin-user-form" action="{{ url_for('admin_create_user') }}" method="post" data-admin-user-form data-create-action="{{ url_for('admin_create_user') }}">
+                            <div class="form-grid">
+                                <label class="field">
+                                    <span>First name</span>
+                                    <input type="text" name="first_name" autocomplete="given-name" required data-user-field="first_name">
+                                </label>
+                                <label class="field">
+                                    <span>Last name</span>
+                                    <input type="text" name="last_name" autocomplete="family-name" required data-user-field="last_name">
+                                </label>
+                                <label class="field">
+                                    <span>Email</span>
+                                    <input type="email" name="email" autocomplete="email" required data-user-field="email">
+                                </label>
+                                <label class="field">
+                                    <span>Password</span>
+                                    <input type="password" name="password" autocomplete="new-password" required data-user-field="password" data-password-field>
+                                </label>
+                                <label class="field">
+                                    <span>Role</span>
+                                    <select name="role" required data-user-field="role" data-role-field>
+                                        <option value="free">Free</option>
+                                        <option value="premium">Premium</option>
+                                        <option value="admin">Admin</option>
+                                    </select>
+                                </label>
+                                <label class="field">
+                                    <span>Status</span>
+                                    <select name="status" required data-user-field="status">
+                                        <option value="ACTIVE">Active</option>
+                                        <option value="DISABLED">Disabled</option>
+                                    </select>
+                                </label>
+                                <label class="field">
+                                    <span>Weekly Usage</span>
+                                    <input type="text" value="Select a user to view usage" readonly data-user-field="weekly_usage">
+                                </label>
+                                <label class="field">
+                                    <span>Premium from</span>
+                                    <input type="date" name="premium_valid_from" aria-label="Premium start date" data-user-field="premium_valid_from">
+                                </label>
+                                <label class="field">
+                                    <span>Premium until</span>
+                                    <input type="date" name="premium_valid_until" aria-label="Premium end date" data-user-field="premium_valid_until">
+                                </label>
+                                <label class="field field--checkbox">
+                                    <input type="checkbox" name="clear_premium_validity" data-user-field="clear_premium_validity">
+                                    <span>Remove premium validity dates</span>
+                                </label>
+                            </div>
+                            <div class="form-actions admin-form-actions">
+                                <button class="button button--primary" type="submit" data-user-submit>Add User</button>
+                                <button class="button button--ghost" type="button" data-cancel-edit hidden>Cancel Edit</button>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="card-section">
+                        <h3 class="card-title">Quota settings</h3>
+                        <p class="card-copy">Adjust weekly usage limits and reset quotas immediately.</p>
+                        <form class="admin-settings-form" action="{{ url_for('admin_update_settings') }}" method="post">
+                            <div class="form-grid">
+                                <label class="field">
+                                    <span>Guest weekly limit</span>
+                                    <input type="number" name="guest_weekly_limit" min="0" value="{{ guest_weekly_limit }}" required>
+                                </label>
+                                <label class="field">
+                                    <span>Free weekly limit</span>
+                                    <input type="number" name="free_weekly_limit" min="0" value="{{ free_weekly_limit }}" required>
+                                </label>
+                                <label class="field">
+                                    <span>Premium weekly limit</span>
+                                    <input type="number" name="premium_weekly_limit" min="0" value="{{ premium_weekly_limit }}" required>
+                                </label>
+                                <label class="field field--checkbox">
+                                    <input type="checkbox" name="reset_quota">
+                                    <span>Reset weekly usage now</span>
+                                </label>
+                            </div>
+                            <button class="button button--primary" type="submit">Save settings</button>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="table-panel">
+                    <div class="table-toolbar">
+                        <div>
+                            <p class="section-kicker">Users</p>
+                            <h2 class="table-title">Account directory</h2>
+                        </div>
+                        <div class="toolbar-actions">
+                            <input class="field field--search" data-admin-table-search placeholder="Search users..." aria-label="Search users">
+                        </div>
+                    </div>
+                    <div class="toast toast--error admin-feedback" role="alert" data-admin-feedback hidden></div>
+                    <div class="admin-table-wrap">
+                        <table class="admin-table" id="users-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col" class="select-column">Select</th>
+                                    <th scope="col" class="sortable" data-colindex="1">User ID</th>
+                                    <th scope="col" class="sortable" data-colindex="2">Name</th>
+                                    <th scope="col" class="sortable" data-colindex="3">Email</th>
+                                    <th scope="col" class="sortable" data-colindex="4">Role</th>
+                                    <th scope="col">Status</th>
+                                    <th scope="col" class="sortable" data-sort-type="date">Premium Valid Until</th>
+                                    <th scope="col">Security Questions Configured</th>
+                                    <th scope="col">Last login</th>
+                                    <th scope="col">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for account in users %}
+                                <tr data-user-row
+                                    data-user-id="{{ account.id }}"
+                                    data-update-action="{{ url_for('admin_update_user', user_id=account.id) }}"
+                                    data-first-name="{{ account.first_name }}"
+                                    data-last-name="{{ account.last_name }}"
+                                    data-full-name="{{ account.full_name }}"
+                                    data-email="{{ account.email }}"
+                                    data-role="{{ account.role.lower() }}"
+                                    data-status="{{ account.status }}"
+                                    data-weekly-usage="{{ account.weekly_usage_count }}"
+                                    data-premium-valid-from="{{ account.premium_valid_from_display or '' }}"
+                                    data-premium-valid-until="{{ account.premium_valid_until_display or '' }}">
+                                    <td class="select-column">
+                                        <input class="user-select-checkbox" type="checkbox" aria-label="Select {{ account.full_name }}" data-user-select>
+                                    </td>
+                                    <td>{{ account.id }}</td>
+                                    <td>
+                                        <div class="user-cell">
+                                            <div>
+                                                <strong>{{ account.full_name }}</strong>
+                                                <span class="user-subtext">{{ account.email }}</span>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>{{ account.email }}</td>
+                                    <td>{{ account.role.title() }}</td>
+                                    <td>
+                                        <span class="status-pill {{ 'status-pill--success' if account.status == 'ACTIVE' else 'status-pill--danger' }}">{{ account.status.title() }}</span>
+                                        {% if account.is_locked %}
+                                        <span class="status-pill status-pill--warning">Locked</span>
+                                        {% endif %}
+                                    </td>
+                                    <td data-sort-value="{% if account.role == 'ADMIN' %}9999-12-31{% elif account.role == 'PREMIUM' and account.premium_valid_until_display %}{{ account.premium_valid_until_display }}{% else %}0000-00-00{% endif %}">
+                                        {% if account.role == 'ADMIN' %}
+                                        <span class="status-pill status-pill--success">Unlimited</span>
+                                        {% elif account.role == 'PREMIUM' %}
+                                        <span class="status-pill {{ 'status-pill--success' if account.premium_is_active else 'status-pill--danger' }}">
+                                            {{ account.premium_valid_until_formatted or 'No expiry set' }}
+                                        </span>
+                                        {% else %}
+                                        <span class="status-pill status-pill--muted">N/A</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="status-pill {{ 'status-pill--success' if account.security_questions_configured else 'status-pill--muted' }}">
+                                            {{ 'Yes' if account.security_questions_configured else 'No' }}
+                                        </span>
+                                    </td>
+                                    <td>{{ account.last_login_at[:16].replace('T', ' ') if account.last_login_at else 'Not available' }}</td>
+                                    <td>
+                                        <form action="{{ url_for('admin_delete_user', user_id=account.id) }}"
+                                              method="post"
+                                              data-delete-user-form
+                                              data-user-name="{{ account.full_name }}"
+                                              data-user-email="{{ account.email }}"
+                                              {% if account.id == user.id %}
+                                              data-delete-blocked-message="You cannot delete your own administrator account."
+                                              {% elif account.is_admin and stats.admins <= 1 %}
+                                              data-delete-blocked-message="At least one active administrator account must remain."
+                                              {% endif %}>
+                                            <button class="button button--danger" type="submit">Delete User</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="pagination-controls" aria-label="Table pagination">
+                        <button class="pagination-button" type="button" data-page="prev">Previous</button>
+                        <div class="pagination-pages"></div>
+                        <button class="pagination-button" type="button" data-page="next">Next</button>
+                    </div>
+                </div>
+
+                <dialog class="delete-user-dialog" data-delete-user-dialog aria-labelledby="delete-user-title">
+                    <form method="dialog" class="delete-user-dialog__content">
+                        <div>
+                            <p class="section-kicker">Delete User</p>
+                            <h3 id="delete-user-title" class="card-title">Are you sure you want to delete this user?</h3>
+                        </div>
+                        <div class="delete-user-dialog__identity">
+                            <strong data-delete-user-name></strong>
+                            <a data-delete-user-email href="#"></a>
+                        </div>
+                        <p class="delete-user-dialog__warning">This action cannot be undone.</p>
+                        <div class="button-group">
+                            <button class="button button--ghost" type="button" data-delete-cancel>Cancel</button>
+                            <button class="button button--danger" type="button" data-delete-confirm>Delete User</button>
+                        </div>
+                    </form>
+                </dialog>
+            </section>
+
+            <section class="admin-section" id="logs">
+                <div class="section-heading">
+                    <div>
+                        <p class="section-kicker">Security</p>
+                        <h2>Recent audit events</h2>
+                    </div>
+                </div>
+                <div class="log-grid">
+                    {% for event in audit_events %}
+                    <article class="log-card">
+                        <div>
+                            <p class="log-label">{{ event.event_type }}</p>
+                            <p>{{ event.details or 'No details available' }}</p>
+                        </div>
+                        <div class="log-meta">{{ event.email or 'System' }} · {{ event.created_at }}</div>
+                    </article>
+                    {% else %}
+                    <article class="log-card">
+                        <div>
+                            <p class="log-label">No audit events yet</p>
+                            <p>Security and admin events will appear here once they are generated.</p>
+                        </div>
+                    </article>
+                    {% endfor %}
+                </div>
+            </section>
+        </div>
+    </main>
+    <script src="{{ url_for('static', filename='js/app.js', v='9') }}"></script>
+</body>
+</html>

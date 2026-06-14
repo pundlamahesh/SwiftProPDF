@@ -1,4 +1,4 @@
-# SwiftPDF Documentation Index
+# SwiftProPDF Documentation Index
 
 ## 📚 Quick Navigation
 
@@ -66,16 +66,16 @@
 
 ## 🎯 Choose Your Path
 
-### "I want to try SwiftPDF right now"
+### "I want to try SwiftProPDF right now"
 1. Read: [QUICKSTART.md](QUICKSTART.md)
-2. Run: `swiftpdf-ui`
+2. Run: `swiftpropdf-ui`
 3. Visit: http://127.0.0.1:5000
 
 ### "I need to install it properly"
 1. Read: [SETUP.md](SETUP.md)
 2. Follow installation steps
 3. Configure with .env
-4. Start: `swiftpdf-ui`
+4. Start: `swiftpropdf-ui`
 
 ### "I need to deploy to production"
 1. Read: [DEPLOYMENT.md](DEPLOYMENT.md)
@@ -134,7 +134,7 @@ Frontend              Backend                Processing
                           │
                           ▼
                      ┌──────────┐
-                     │ SQLite   │
+                     │PostgreSQL│
                      │ Database │
                      └──────────┘
 ```
@@ -142,7 +142,7 @@ Frontend              Backend                Processing
 ## 📁 File Structure
 
 ```
-SwiftPDF/
+SwiftProPDF/
 ├── Documentation
 │   ├── README.md              ← Full documentation
 │   ├── QUICKSTART.md          ← Quick 5-min setup
@@ -160,7 +160,7 @@ SwiftPDF/
 │   └── .dockerignore          ← Build optimization
 │
 ├── Application Code
-│   └── src/SwiftPDF/
+│   └── src/SwiftProPDF/
 │       ├── core.py            ← PDF processing (1200+ lines)
 │       ├── web.py             ← Flask routes (500+ lines)
 │       ├── auth.py            ← Authentication
@@ -180,7 +180,7 @@ SwiftPDF/
 ## 🔐 Security Checklist
 
 Before production deployment:
-- [ ] Change SWIFTPDF_SECRET_KEY
+- [ ] Change SWIFTPROPDF_SECRET_KEY
 - [ ] Set FLASK_ENV=production
 - [ ] Enable HTTPS/TLS
 - [ ] Configure firewall
@@ -238,8 +238,8 @@ See [SETUP.md](SETUP.md) Troubleshooting section for more help.
 
 ### For Developers
 1. [ENHANCEMENTS.md](ENHANCEMENTS.md) - Understand what's new
-2. Review `src/SwiftPDF/core.py` - Processing logic
-3. Review `src/SwiftPDF/web.py` - API routes
+2. Review `src/SwiftProPDF/core.py` - Processing logic
+3. Review `src/SwiftProPDF/web.py` - API routes
 4. Run tests and verify
 
 ### For Reviewers
@@ -253,7 +253,7 @@ See [SETUP.md](SETUP.md) Troubleshooting section for more help.
 ### Local Development
 ```bash
 pip install -e .
-swiftpdf-ui
+swiftpropdf-ui
 ```
 
 ### Docker
@@ -295,7 +295,7 @@ See [DEPLOYMENT.md](DEPLOYMENT.md)
 
 1. **Start Here**: Read [QUICKSTART.md](QUICKSTART.md)
 2. **Install**: `pip install -e .`
-3. **Run**: `swiftpdf-ui`
+3. **Run**: `swiftpropdf-ui`
 4. **Explore**: Try each feature
 5. **Deploy**: Follow [DEPLOYMENT.md](DEPLOYMENT.md)
 6. **Monitor**: Setup logging and alerts
@@ -310,6 +310,6 @@ See [DEPLOYMENT.md](DEPLOYMENT.md)
 
 ---
 
-**SwiftPDF v0.2.0 - Complete PDF Processing Platform** ✨
+**SwiftProPDF v0.2.0 - Complete PDF Processing Platform** ✨
 
 Start with [QUICKSTART.md](QUICKSTART.md) and enjoy! 🚀

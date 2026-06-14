@@ -1,0 +1,108 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Account Profile | SwiftProPDF{% endblock %}
+
+{% block content %}
+<section class="profile-hero">
+    <div class="profile-header">
+        <span class="eyebrow">Account</span>
+        <h1>Your SwiftProPDF profile</h1>
+        <p>Manage your account details, track tool usage, and see your current usage quota.</p>
+    </div>
+</section>
+
+<section class="profile-grid">
+    <div class="profile-card">
+        <h2>Account details</h2>
+        <dl class="details-list">
+            <div>
+                <dt>Name</dt>
+                <dd>{{ user.full_name }}</dd>
+            </div>
+            <div>
+                <dt>Email</dt>
+                <dd>{{ user.email }}</dd>
+            </div>
+            <div>
+                <dt>Plan</dt>
+                <dd>{{ plan }}</dd>
+            </div>
+            {% if user.is_premium %}
+            <div>
+                <dt>Premium status</dt>
+                <dd>
+                    <span class="status-badge {{ 'success-badge' if user.premium_is_active else 'danger-badge' }}">
+                        {{ user.premium_status_message }}
+                    </span>
+                </dd>
+            </div>
+            {% endif %}
+            <div>
+                <dt>Last login</dt>
+                <dd>{{ user.last_login_at.replace('T', ' ')[:19] if user.last_login_at else 'Not available' }}</dd>
+            </div>
+            <div>
+                <dt>Security Questions Configured</dt>
+                <dd>{{ 'Yes' if user.security_questions_configured else 'No' }}</dd>
+            </div>
+        </dl>
+    </div>
+
+    <div class="profile-card">
+        <h2>Usage summary</h2>
+        <div class="usage-summary">
+            <div class="usage-row">
+                <span>Conversions used this week</span>
+                <strong>{{ usage }}</strong>
+            </div>
+            <div class="usage-row">
+                <span>Remaining quota</span>
+                <strong>{% if usage_limit == 0 %}Unlimited{% else %}{{ remaining_quota }}{% endif %}</strong>
+            </div>
+            <div class="usage-row">
+                <span>Weekly limit</span>
+                <strong>{% if usage_limit == 0 %}Unlimited{% else %}{{ usage_limit }}{% endif %}</strong>
+            </div>
+        </div>
+        <div class="quota-banner">{{ quota_message }}</div>
+    </div>
+</section>
+
+<section class="profile-grid">
+    <div class="profile-card">
+        <h2>Security Questions</h2>
+        <p>Update the verification answers used for password recovery.</p>
+
+        {% if security_error %}
+        <div class="alert" role="alert">{{ security_error }}</div>
+        {% endif %}
+        {% if security_success %}
+        <div class="status success-alert" role="status">{{ security_success }}</div>
+        {% endif %}
+
+        <form class="auth-form" action="{{ url_for('update_security_questions') }}" method="post">
+            <label class="field">
+                <span>Current password</span>
+                <input type="password" name="current_password" autocomplete="current-password" required>
+            </label>
+
+            <label class="field">
+                <span>Date of Birth</span>
+                <input type="date" name="date_of_birth" required>
+            </label>
+
+            <label class="field">
+                <span>Which city are you currently living in?</span>
+                <input type="text" name="current_city" autocomplete="address-level2" required>
+            </label>
+
+            <button class="primary-action" type="submit">Save Security Questions</button>
+        </form>
+    </div>
+</section>
+
+<section class="profile-note">
+    <h2>Need more conversions?</h2>
+    <p>Guest users can try up to 5 conversions per week. Registered Free accounts can use up to 10 per week, while Premium and Admin users enjoy unlimited weekly access.</p>
+</section>
+{% endblock %}

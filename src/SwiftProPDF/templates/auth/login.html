@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Login | SwiftProPDF</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <main class="auth-shell">
+        <section class="auth-card">
+            <div class="auth-brand">
+                <img src="{{ url_for('static', filename='images/logo.svg') }}" alt="SwiftProPDF" class="logo">
+                <span>SwiftProPDF</span>
+            </div>
+
+            <div class="auth-heading">
+                <h1>Welcome back</h1>
+                <p>Log in to use your PDF tools. Accounts lock briefly after repeated failed attempts.</p>
+            </div>
+
+            {% if error %}
+            <div class="alert" role="alert">{{ error }}</div>
+            {% endif %}
+
+            {% if status %}
+            <div class="status success-alert" role="status">{{ status }}</div>
+            {% endif %}
+
+            <form class="auth-form" action="{{ url_for('login') }}" method="post">
+                <label class="field">
+                    <span>Email</span>
+                    <input type="email" name="email" value="{{ email or '' }}" autocomplete="email" required autofocus>
+                </label>
+
+                <label class="field">
+                    <span>Password</span>
+                    <input type="password" name="password" autocomplete="current-password" required>
+                </label>
+
+                <button class="primary-action" type="submit">Login</button>
+            </form>
+
+            <div class="auth-links">
+                <a href="{{ url_for('forgot_password') }}">Forgot Password?</a>
+            </div>
+
+            <p class="auth-switch">Need an account? <a href="{{ url_for('register') }}">Register</a></p>
+        </section>
+    </main>
+</body>
+</html>

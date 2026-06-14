@@ -1,15 +1,15 @@
 from pathlib import Path
-from SwiftPDF.auth import init_db, create_user
+from SwiftProPDF.auth import init_db, create_user
 
 EMAIL = "admin@example.com"
 PASSWORD = "Admin@12345"
 
 
 def main():
-    db = Path("src/SwiftPDF/instance/swiftpdf.sqlite3")
-    init_db(db)
+    db_path = Path("src/SwiftProPDF/instance/swiftpropdf.sqlite3")
+    init_db(db_path)
     try:
-        uid = create_user(db, "Admin", "User", EMAIL, PASSWORD)
+        uid = create_user(db_path, "Admin", "User", EMAIL, PASSWORD)
         print("CREATED", uid)
     except Exception as e:
         print("ERROR", e)

@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy SwiftPDF Docker
+      - name: Deploy SwiftProPDF Docker
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -17,7 +17,7 @@ jobs:
           script: |
             set -e
 
-            cd "$HOME/SwiftPDF"
+            cd "$HOME/SwiftProPDF"
 
             echo "Fetching latest code..."
             git fetch origin
@@ -45,7 +45,7 @@ jobs:
             docker compose ps
 
             echo "Recent logs:"
-            docker logs --tail 50 swiftpdf
+            docker logs --tail 50 swiftpropdf
 
             echo "Cleaning Docker cache..."
             sudo docker image prune -af

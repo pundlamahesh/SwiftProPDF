@@ -1,11 +1,17 @@
-import sqlite3
 from pathlib import Path
 
-db = Path('src/SwiftPDF/instance/swiftpdf.sqlite3')
-con = sqlite3.connect(db)
-con.row_factory = sqlite3.Row
-rows = con.execute('SELECT id, first_name, last_name, email FROM users').fetchall()
-print(len(rows))
-for r in rows:
-    print(dict(r))
-con.close()
+from SwiftProPDF.auth import init_db, list_users
+
+
+db_path = Path("src/SwiftProPDF/instance/swiftpropdf.sqlite3")
+init_db(db_path)
+users = list_users(db_path)
+print(len(users))
+for user in users:
+    print({
+        "id": user["id"],
+        "first_name": user["first_name"],
+        "last_name": user["last_name"],
+        "email": user["email"],
+        "role": user["role"],
+    })

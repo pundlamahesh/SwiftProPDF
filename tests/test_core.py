@@ -4,7 +4,7 @@ import pytest
 from PIL import Image
 from pypdf import PdfReader, PdfWriter
 
-from SwiftPDF.core import PdfLockError, PdfSplitError, compress_image, lock_pdf, parse_page_ranges
+from SwiftProPDF.core import PdfLockError, PdfSplitError, compress_image, lock_pdf, parse_page_ranges
 
 
 def test_parse_page_ranges_expands_ranges_and_single_pages() -> None:

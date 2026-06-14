@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Setup SwiftPDF Server
+      - name: Setup SwiftProPDF Server
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -32,10 +32,10 @@ jobs:
               certbot \
               python3-certbot-nginx
 
-            if [ ! -d "$HOME/SwiftPDF" ]; then
-              git clone https://github.com/pundlamahesh/SwiftPDF.git "$HOME/SwiftPDF"
+            if [ ! -d "$HOME/SwiftProPDF" ]; then
+              git clone https://github.com/pundlamahesh/SwiftProPDF.git "$HOME/SwiftProPDF"
             fi
-            cd "$HOME/SwiftPDF"
+            cd "$HOME/SwiftProPDF"
             git fetch origin
             git reset --hard origin/main
 
@@ -45,20 +45,20 @@ jobs:
 
             source "$HOME/venv/bin/activate"
 
-            cd "$HOME/SwiftPDF"
+            cd "$HOME/SwiftProPDF"
 
             pip install --upgrade pip
             pip install gunicorn
             pip install -e .
 
             # Copy systemd service
-            sudo cp "$HOME/SwiftPDF/deploy/swiftpdf.service" /etc/systemd/system/swiftpdf.service
+            sudo cp "$HOME/SwiftProPDF/deploy/swiftpropdf.service" /etc/systemd/system/swiftpropdf.service
 
             # Copy nginx config
-            sudo cp "$HOME/SwiftPDF/deploy/nginx.conf" /etc/nginx/sites-available/swiftpdf
+            sudo cp "$HOME/SwiftProPDF/deploy/nginx.conf" /etc/nginx/sites-available/swiftpropdf
 
             # Enable nginx site
-            sudo ln -sf /etc/nginx/sites-available/swiftpdf /etc/nginx/sites-enabled/swiftpdf
+            sudo ln -sf /etc/nginx/sites-available/swiftpropdf /etc/nginx/sites-enabled/swiftpropdf
 
             # Remove default nginx site
             sudo rm -f /etc/nginx/sites-enabled/default
@@ -70,7 +70,7 @@ jobs:
             sudo nginx -t
             sudo systemctl enable nginx
             sudo systemctl reload nginx || sudo systemctl restart nginx
-            cat > "$HOME/SwiftPDF/.env" << EOF
+            cat > "$HOME/SwiftProPDF/.env" << EOF
             SECRET_KEY=${{ secrets.SECRET_KEY }}
             SMTP_SERVER=${{ secrets.SMTP_SERVER }}
             SMTP_PORT=${{ secrets.SMTP_PORT }}
@@ -79,12 +79,12 @@ jobs:
             SENDER_EMAIL=${{ secrets.SENDER_EMAIL }}
             EOF
 
-            chmod 600 "$HOME/SwiftPDF/.env"
+            chmod 600 "$HOME/SwiftProPDF/.env"
 
-            sudo systemctl enable swiftpdf
-            sudo systemctl restart swiftpdf
+            sudo systemctl enable swiftpropdf
+            sudo systemctl restart swiftpropdf
 
             sleep 10
 
-            sudo systemctl status swiftpdf --no-pager
+            sudo systemctl status swiftpropdf --no-pager
             sudo systemctl status nginx --no-pager

@@ -1,4 +1,4 @@
-name: Deploy SwiftPDF
+name: Deploy SwiftProPDF
 
 on:
   workflow_dispatch:
@@ -19,11 +19,11 @@ jobs:
           script: |
             set -e
 
-            if [ ! -d "$HOME/SwiftPDF" ]; then
-              git clone https://github.com/pundlamahesh/SwiftPDF.git "$HOME/SwiftPDF"
+            if [ ! -d "$HOME/SwiftProPDF" ]; then
+              git clone https://github.com/pundlamahesh/SwiftProPDF.git "$HOME/SwiftProPDF"
             fi
 
-            cd "$HOME/SwiftPDF"
+            cd "$HOME/SwiftProPDF"
 
             git fetch origin
             git reset --hard origin/main
@@ -37,8 +37,8 @@ jobs:
             pip install --upgrade pip
             pip install -e .
 
-            sudo systemctl restart swiftpdf
+            sudo systemctl restart swiftpropdf
 
             sleep 5
 
-            sudo systemctl status swiftpdf --no-pager
+            sudo systemctl status swiftpropdf --no-pager

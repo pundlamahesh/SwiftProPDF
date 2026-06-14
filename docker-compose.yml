@@ -1,15 +1,48 @@
 services:
-  swiftpdf:
+  postgres:
+    image: postgres:16-alpine
+    container_name: swiftpropdf-postgres
+    environment:
+      POSTGRES_DB: swiftpropdf
+      POSTGRES_USER: swiftpropdf
+      POSTGRES_PASSWORD: swiftpropdf
+    volumes:
+      - swiftpropdf-postgres:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U swiftpropdf -d swiftpropdf"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: swiftpropdf-redis
+    restart: unless-stopped
+    volumes:
+      - swiftpropdf-redis:/data
+
+  swiftpropdf:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: swiftpdf
+    container_name: swiftpropdf
     env_file:
       - .env
+    environment:
+      DATABASE_URL: postgresql://swiftpropdf:swiftpropdf@postgres:5432/swiftpropdf
+      REDIS_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      SWIFTPROPDF_ASYNC_TOOLS: "1"
     ports:
       - "8000:8000"
     volumes:
-      - swiftpdf-instance:/app/src/SwiftPDF/instance
+      - swiftpropdf-instance:/app/src/SwiftProPDF/instance
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/').read()"]
@@ -18,5 +51,29 @@ services:
       retries: 3
       start_period: 40s
 
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: swiftpropdf-worker
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://swiftpropdf:swiftpropdf@postgres:5432/swiftpropdf
+      REDIS_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      SWIFTPROPDF_ASYNC_TOOLS: "1"
+    command: ["celery", "-A", "SwiftProPDF.web_app.celery_app:celery_app", "worker", "--loglevel=info"]
+    volumes:
+      - swiftpropdf-instance:/app/src/SwiftProPDF/instance
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
 volumes:
-  swiftpdf-instance:
+  swiftpropdf-instance:
+  swiftpropdf-redis:
+  swiftpropdf-postgres:

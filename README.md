@@ -1,6 +1,6 @@
-# SwiftPDF
+# SwiftProPDF
 
-SwiftPDF is a Flask-based PDF toolkit with a public home page, guest-friendly tool access, user accounts, usage quotas, premium/admin roles, and an admin dashboard for user and quota management.
+SwiftProPDF is a Flask-based PDF toolkit with a public home page, guest-friendly tool access, user accounts, usage quotas, premium/admin roles, and an admin dashboard for user and quota management.
 
 ## Features
 
@@ -14,7 +14,7 @@ SwiftPDF is a Flask-based PDF toolkit with a public home page, guest-friendly to
 
 ## Authentication And Roles
 
-SwiftPDF supports four access levels:
+SwiftProPDF supports four access levels:
 
 - Guest users can use public tools with the guest weekly quota.
 - Free users can register, sign in, and use the Free weekly quota.
@@ -61,7 +61,7 @@ Requirements:
 
 ```bash
 git clone <repository-url>
-cd SwiftPDF
+cd SwiftProPDF
 python -m venv .venv
 ```
 
@@ -71,7 +71,7 @@ Windows PowerShell:
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip setuptools wheel
 python -m pip install -e .
-swiftpdf-ui
+swiftpropdf-ui
 ```
 
 macOS/Linux:
@@ -80,7 +80,7 @@ macOS/Linux:
 source .venv/bin/activate
 python -m pip install --upgrade pip setuptools wheel
 python -m pip install -e .
-swiftpdf-ui
+swiftpropdf-ui
 ```
 
 Open `http://127.0.0.1:5000`.
@@ -92,13 +92,13 @@ Create `.env` from `.env.example`.
 Required in production:
 
 ```env
-SWIFTPDF_SECRET_KEY=replace-with-a-strong-random-secret
-SWIFTPDF_COOKIE_SECURE=1
+SWIFTPROPDF_SECRET_KEY=replace-with-a-strong-random-secret
+SWIFTPROPDF_COOKIE_SECURE=1
 ```
 
-`SWIFTPDF_COOKIE_SECURE=1` requires HTTPS.
+`SWIFTPROPDF_COOKIE_SECURE=1` requires HTTPS.
 
-The app currently stores SQLite data at `src/SwiftPDF/instance/swiftpdf.sqlite3` and creates/migrates tables at startup.
+The app uses PostgreSQL when `DATABASE_URL` is set. Docker Compose starts a PostgreSQL service automatically and points both the web app and Celery worker at it. If `DATABASE_URL` is not set, the auth layer can still fall back to SQLite for lightweight local tests.
 
 ## Docker
 
@@ -108,18 +108,29 @@ Build and run:
 docker compose up --build
 ```
 
-The app listens on `http://localhost:5000`. The compose file persists SQLite data with the `swiftpdf-instance` volume.
+The app listens on `http://localhost:8000`. The compose file starts the web app, PostgreSQL, Redis, and a Celery worker. PostgreSQL data is persisted with the `swiftpropdf-postgres` volume; generated background-job files are persisted with the `swiftpropdf-instance` volume.
+
+## Background Processing
+
+SwiftProPDF supports both processing modes:
+
+- Normal mode: `SWIFTPROPDF_ASYNC_TOOLS=0`
+  The existing Flask routes process each upload and return the generated file directly.
+- Async mode: `SWIFTPROPDF_ASYNC_TOOLS=1`
+  Tool form submissions are queued through Celery, Redis stores broker/result state, the browser polls job status, and the finished file downloads when ready.
+
+Docker Compose enables async mode automatically. Local development can keep normal mode unless Redis and a Celery worker are running.
 
 ## VPS Deployment
 
 For Ubuntu/Nginx:
 
 1. Install Docker and Docker Compose.
-2. Copy `.env.example` to `.env`, set a strong `SWIFTPDF_SECRET_KEY`, and set `SWIFTPDF_COOKIE_SECURE=1`.
+2. Copy `.env.example` to `.env`, set a strong `SWIFTPROPDF_SECRET_KEY`, and set `SWIFTPROPDF_COOKIE_SECURE=1`.
 3. Run `docker compose up -d --build`.
-4. Put Nginx in front of `127.0.0.1:5000`.
+4. Put Nginx in front of `127.0.0.1:8000`.
 5. Enable HTTPS with Let's Encrypt.
-6. Back up the persistent SQLite volume regularly.
+6. Back up the persistent PostgreSQL volume regularly.
 
 Nginx proxy sketch:
 
@@ -130,7 +141,7 @@ server {
     client_max_body_size 100M;
 
     location / {
-        proxy_pass http://127.0.0.1:5000;
+        proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -141,7 +152,7 @@ server {
 
 ## Cloud Deployment
 
-AWS EC2 deployment follows the VPS path: Docker, Compose, Nginx, HTTPS, and volume backups. Future Kubernetes readiness mainly requires moving SQLite to a managed database or persistent volume strategy and externalizing secrets.
+AWS EC2 deployment follows the VPS path: Docker, Compose, Nginx, HTTPS, and volume backups. Future Kubernetes readiness mainly requires pointing `DATABASE_URL` at managed PostgreSQL, using managed Redis, and externalizing secrets.
 
 ## Tests
 
@@ -153,13 +164,16 @@ python -m pytest
 ## Project Structure
 
 ```text
-src/SwiftPDF/
+src/SwiftProPDF/
   auth.py          Authentication, users, quotas, audit events
-  core.py          PDF and document processing
+  database.py      PostgreSQL connection adapter with SQLite fallback
+  core.py          Compatibility exports for document tools
+  tools/           One module per PDF, image, Office, and QR task
   email_otp.py     SMTP/SES helper functions; not active for password recovery
-  web.py           Flask routes
-  static/          CSS and JavaScript
-  templates/       HTML templates
+  web.py           Compatibility entry point for the Flask app
+  web_app/         Flask app factory, web configuration, and tool catalog
+  static/          Organized CSS, JavaScript, and image assets
+  templates/       Grouped HTML templates by feature area
 tests/             Core, CLI, and auth tests
 ```
 ## Email Config
@@ -176,5 +190,3 @@ name : <blank>
 recordtype:MX
 value : 1 SMTP.GOOGLE.COM
 ```
-
-

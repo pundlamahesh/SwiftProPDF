@@ -1,6 +1,6 @@
-# SwiftPDF Deployment Guide
+# SwiftProPDF Deployment Guide
 
-This guide reflects the current Flask + SQLite application. SwiftPDF does not require a separate database service today; it stores runtime data in SQLite under the package instance directory.
+This guide reflects the current Flask + PostgreSQL application. Docker Compose starts PostgreSQL for account, quota, audit, and session data, Redis for Celery, and a Celery worker for background file processing.
 
 ## Local Docker Compose
 
@@ -10,7 +10,7 @@ This guide reflects the current Flask + SQLite application. SwiftPDF does not re
 cp .env.example .env
 ```
 
-2. Set `SWIFTPDF_SECRET_KEY` to a strong random value.
+2. Set `SWIFTPROPDF_SECRET_KEY` to a strong random value.
 
 3. Start the stack:
 
@@ -18,9 +18,9 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-4. Open `http://localhost:5000`.
+4. Open `http://localhost:8000`.
 
-The `swiftpdf-instance` Docker volume stores the SQLite database.
+The Compose stack starts the web app, PostgreSQL, Redis, and a Celery worker. The `swiftpropdf-postgres` Docker volume stores database data; `swiftpropdf-instance` stores generated background-job files.
 
 ## Ubuntu VPS With Nginx
 
@@ -36,16 +36,16 @@ sudo usermod -aG docker $USER
 Deploy:
 
 ```bash
-git clone <repository-url> /opt/swiftpdf
-cd /opt/swiftpdf
+git clone <repository-url> /opt/swiftpropdf
+cd /opt/swiftpropdf
 cp .env.example .env
 ```
 
 Edit `.env`:
 
 ```env
-SWIFTPDF_SECRET_KEY=<strong-random-secret>
-SWIFTPDF_COOKIE_SECURE=1
+SWIFTPROPDF_SECRET_KEY=<strong-random-secret>
+SWIFTPROPDF_COOKIE_SECURE=1
 ```
 
 Run:
@@ -69,7 +69,7 @@ server {
     client_max_body_size 200M;
 
     location / {
-        proxy_pass http://127.0.0.1:5000;
+        proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -88,31 +88,31 @@ Recommended baseline:
 - Security group allowing 22, 80, and 443
 - Docker Compose deployment as above
 - Nginx and Let's Encrypt on the host
-- Regular backup of the `swiftpdf-instance` volume
+- Regular PostgreSQL backups and backup of generated job files if needed
 
 ## Future Kubernetes Readiness
 
 Before Kubernetes production use, plan for:
 
-- External secret management for `SWIFTPDF_SECRET_KEY`
-- A persistent volume or managed database migration for SQLite data
+- External secret management for `SWIFTPROPDF_SECRET_KEY`
+- A managed PostgreSQL database or persistent PostgreSQL volume
 - Separate ingress TLS configuration
 - Resource requests and limits for LibreOffice-heavy conversions
 
 ## Backups
 
-For Compose volumes, inspect the volume mount and back up the SQLite file regularly:
+For Compose volumes, back up PostgreSQL regularly:
 
 ```bash
-docker volume inspect swiftpdf_swiftpdf-instance
-docker compose exec swiftpdf python -m sqlite3 /app/src/SwiftPDF/instance/swiftpdf.sqlite3 ".backup '/tmp/swiftpdf-backup.sqlite3'"
+docker compose exec postgres pg_dump -U swiftpropdf swiftpropdf > swiftpropdf-backup.sql
 ```
 
 ## Production Checklist
 
-- [ ] Strong `SWIFTPDF_SECRET_KEY`
-- [ ] `SWIFTPDF_COOKIE_SECURE=1` behind HTTPS
+- [ ] Strong `SWIFTPROPDF_SECRET_KEY`
+- [ ] `SWIFTPROPDF_COOKIE_SECURE=1` behind HTTPS
 - [ ] Nginx `client_max_body_size` at least 100M
-- [ ] Persistent SQLite volume backed up
+- [ ] Persistent PostgreSQL volume backed up
+- [ ] Redis/Celery worker healthy
 - [ ] LibreOffice conversion tested
 - [ ] Login, registration, forgot password, admin user management, premium expiry editing, and PDF tools smoke-tested

@@ -3,9 +3,9 @@ requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "swiftpdf"
+name = "swiftpropdf"
 version = "0.1.0"
-description = "SwiftPDF - Fast and secure PDF tools including unlock, split, and merge capabilities."
+description = "SwiftProPDF - Fast and secure PDF tools including unlock, split, and merge capabilities."
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
@@ -19,21 +19,31 @@ dependencies = [
     "pandas>=1.5.0",
     "Pillow>=9.0.0",
     "qrcode>=7.0",
+    "celery[redis]>=5.3.0",
+    "redis>=5.0.0",
+    "psycopg[binary]>=3.1.0",
 ]
 
 [project.scripts]
-swiftpdf = "SwiftPDF.cli:main"
-swiftpdf-ui = "SwiftPDF.web:main"
+swiftpropdf = "SwiftProPDF.cli:main"
+swiftpropdf-ui = "SwiftProPDF.web:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-SwiftPDF = [
-    "static/*.js",
-    "static/*.css",
-    "static/*.png",
-    "templates/*.html",
+SwiftProPDF = [
+    "static/css/*.css",
+    "static/images/*.jpeg",
+    "static/images/*.png",
+    "static/images/*.svg",
+    "static/js/*.js",
+    "templates/account/*.html",
+    "templates/admin/*.html",
+    "templates/auth/*.html",
+    "templates/layouts/*.html",
+    "templates/public/*.html",
+    "templates/tools/*.html",
 ]
 
 [tool.pytest.ini_options]
