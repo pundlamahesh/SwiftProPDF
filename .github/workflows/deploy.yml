@@ -2,6 +2,11 @@ name: Deploy SwiftProPDF
 
 on:
   workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch to deploy
+        required: true
+        default: main
 
 jobs:
   deploy:
@@ -10,35 +15,112 @@ jobs:
     steps:
       - name: Deploy
         uses: appleboy/ssh-action@v1.2.0
-
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-
           script: |
-            set -e
+            set -euo pipefail
 
-            if [ ! -d "$HOME/SwiftProPDF" ]; then
-              git clone https://github.com/pundlamahesh/SwiftProPDF.git "$HOME/SwiftProPDF"
+            APP_DIR="$HOME/SwiftProPDF"
+            VENV_DIR="$HOME/venv"
+            BRANCH="${{ inputs.branch }}"
+
+            if [ ! -d "$APP_DIR/.git" ]; then
+              git clone -b "$BRANCH" https://github.com/pundlamahesh/SwiftProPDF.git "$APP_DIR"
             fi
 
-            cd "$HOME/SwiftProPDF"
+            cd "$APP_DIR"
+            git fetch origin "$BRANCH"
+            git reset --hard "origin/$BRANCH"
 
-            git fetch origin
-            git reset --hard origin/main
-
-            if [ ! -d "$HOME/venv" ]; then
-              python3 -m venv "$HOME/venv"
+            if [ ! -d "$VENV_DIR" ]; then
+              python3 -m venv "$VENV_DIR"
             fi
 
-            source "$HOME/venv/bin/activate"
-
-            pip install --upgrade pip
+            source "$VENV_DIR/bin/activate"
+            pip install --upgrade pip setuptools wheel
             pip install -e .
+            pip install "gunicorn>=21.0.0"
 
+            if [ ! -f "$APP_DIR/.env" ]; then
+              echo ".env is missing. Run the Server Setup workflow first."
+              exit 1
+            fi
+
+            ensure_env_key() {
+              key="$1"
+              value="$2"
+              if ! grep -q "^${key}=" "$APP_DIR/.env"; then
+                printf '%s=%s\n' "$key" "$value" >> "$APP_DIR/.env"
+              fi
+            }
+
+            if ! grep -q "^SWIFTPROPDF_SECRET_KEY=" "$APP_DIR/.env" && grep -q "^SECRET_KEY=" "$APP_DIR/.env"; then
+              legacy_secret="$(grep "^SECRET_KEY=" "$APP_DIR/.env" | tail -n 1 | cut -d= -f2-)"
+              printf '%s=%s\n' "SWIFTPROPDF_SECRET_KEY" "$legacy_secret" >> "$APP_DIR/.env"
+            fi
+
+            ensure_env_key SWIFTPROPDF_COOKIE_SECURE "1"
+            ensure_env_key DATABASE_URL "postgresql:///swiftpropdf"
+            ensure_env_key SWIFTPROPDF_ASYNC_TOOLS "1"
+            ensure_env_key SWIFTPROPDF_ASYNC_WORKER_CONCURRENCY "2"
+            ensure_env_key SWIFTPROPDF_JOBS_DIR "$APP_DIR/src/SwiftProPDF/instance/jobs"
+            ensure_env_key REDIS_URL "redis://localhost:6379/0"
+            ensure_env_key CELERY_RESULT_BACKEND "redis://localhost:6379/0"
+            ensure_env_key SWIFTPROPDF_JOB_RESULT_EXPIRES "86400"
+            ensure_env_key CLAMAV_ENABLED "1"
+            ensure_env_key CLAMAV_HOST "localhost"
+            ensure_env_key CLAMAV_PORT "3310"
+            ensure_env_key CLAMAV_TIMEOUT "30"
+
+            if ! grep -q "^SWIFTPROPDF_SECRET_KEY=" "$APP_DIR/.env"; then
+              echo "SWIFTPROPDF_SECRET_KEY is missing from .env."
+              exit 1
+            fi
+
+            mkdir -p "$APP_DIR/src/SwiftProPDF/instance/jobs"
+
+            install_service() {
+              source_file="$1"
+              target_file="$2"
+              sed \
+                -e "s|/home/ubuntu|$HOME|g" \
+                -e "s|User=ubuntu|User=$(id -un)|g" \
+                -e "s|Group=ubuntu|Group=$(id -gn)|g" \
+                "$source_file" | sudo tee "$target_file" >/dev/null
+            }
+
+            install_service "$APP_DIR/deploy/swiftpropdf.service" /etc/systemd/system/swiftpropdf.service
+            install_service "$APP_DIR/deploy/swiftpropdf-worker.service" /etc/systemd/system/swiftpropdf-worker.service
+
+            sudo systemctl daemon-reload
+            sudo systemctl enable swiftpropdf swiftpropdf-worker
+
+            sudo systemctl restart postgresql
+            sudo systemctl restart redis-server
+            sudo systemctl restart clamav-daemon || true
+            sudo systemctl restart swiftpropdf-worker
             sudo systemctl restart swiftpropdf
 
-            sleep 5
+            wait_for_service() {
+              service="$1"
+              for attempt in $(seq 1 30); do
+                if sudo systemctl is-active --quiet "$service"; then
+                  echo "$service is active"
+                  return 0
+                fi
+                echo "$service is not active yet; waiting..."
+                sleep 3
+              done
+              sudo systemctl status "$service" --no-pager || true
+              return 1
+            }
+
+            wait_for_service postgresql
+            wait_for_service redis-server
+            wait_for_service swiftpropdf-worker
+            wait_for_service swiftpropdf
 
             sudo systemctl status swiftpropdf --no-pager
+            sudo systemctl status swiftpropdf-worker --no-pager

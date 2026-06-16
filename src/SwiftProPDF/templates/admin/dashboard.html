@@ -20,6 +20,7 @@
 
             <nav class="sidebar-nav" aria-label="Admin menu">
                 <a class="sidebar-link active" href="#dashboard">Dashboard</a>
+                <a class="sidebar-link" href="#operations">Operations</a>
                 <a class="sidebar-link" href="#users">Users</a>
                 <a class="sidebar-link" href="#analytics">Usage Analytics</a>
                 <a class="sidebar-link" href="#tools">Tools</a>
@@ -101,6 +102,78 @@
                         </div>
                     </article>
                 </div>
+            </section>
+
+            <section class="admin-section" id="operations">
+                <div class="section-heading">
+                    <div>
+                        <p class="section-kicker">Operations</p>
+                        <h2>Async job health</h2>
+                    </div>
+                    <span class="status-pill {{ async_health.worker_status_variant }}">
+                        {{ 'Async enabled' if async_health.enabled else 'Async disabled' }}
+                    </span>
+                </div>
+
+                <div class="admin-ops-grid">
+                    <article class="metric-card ops-card">
+                        <div class="metric-card__icon">⏳</div>
+                        <div>
+                            <p class="metric-card__label">Queued jobs</p>
+                            <strong class="metric-card__value">{{ async_health.queued_jobs }}</strong>
+                            <p class="metric-card__meta">Waiting, reserved, or scheduled work.</p>
+                        </div>
+                    </article>
+                    <article class="metric-card ops-card">
+                        <div class="metric-card__icon">⚠️</div>
+                        <div>
+                            <p class="metric-card__label">Failed jobs</p>
+                            <strong class="metric-card__value">{{ async_health.failed_jobs }}</strong>
+                            <p class="metric-card__meta">Recorded in the last 24 hours.</p>
+                        </div>
+                    </article>
+                    <article class="metric-card ops-card">
+                        <div class="metric-card__icon">⚙️</div>
+                        <div>
+                            <p class="metric-card__label">Worker status</p>
+                            <strong class="metric-card__value metric-card__value--status">{{ async_health.worker_status }}</strong>
+                            <p class="metric-card__meta">{{ async_health.worker_meta }}</p>
+                        </div>
+                    </article>
+                    <article class="metric-card ops-card">
+                        <div class="metric-card__icon">◆</div>
+                        <div>
+                            <p class="metric-card__label">Redis status</p>
+                            <strong class="metric-card__value metric-card__value--status">{{ async_health.redis_status }}</strong>
+                            <p class="metric-card__meta">{{ async_health.redis_meta }}</p>
+                        </div>
+                    </article>
+                </div>
+
+                <article class="panel card ops-errors-panel">
+                    <div class="panel-header">
+                        <div>
+                            <p class="panel-label">Recent errors</p>
+                            <h2 class="panel-title">Async job failures</h2>
+                        </div>
+                        <span class="badge badge--soft">Latest 5</span>
+                    </div>
+                    {% if async_health.recent_errors %}
+                    <div class="ops-error-list">
+                        {% for event in async_health.recent_errors %}
+                        <div class="ops-error-item">
+                            <div>
+                                <strong>{{ event.details or 'Async job failed' }}</strong>
+                                <span>{{ event.email or 'Guest or system job' }}</span>
+                            </div>
+                            <time>{{ event.created_at }}</time>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="panel-copy">No async job failures have been recorded yet.</p>
+                    {% endif %}
+                </article>
             </section>
 
             <section class="admin-panel-grid" id="analytics">

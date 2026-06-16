@@ -2,6 +2,11 @@ name: Docker Deploy
 
 on:
   workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch to deploy
+        required: true
+        default: main
 
 jobs:
   deploy:
@@ -15,40 +20,96 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            set -e
+            set -euo pipefail
 
-            cd "$HOME/SwiftProPDF"
+            APP_DIR="$HOME/SwiftProPDF"
+            BRANCH="${{ inputs.branch }}"
 
-            echo "Fetching latest code..."
-            git fetch origin
-            git reset --hard origin/docker-migration
+            if [ ! -d "$APP_DIR/.git" ]; then
+              echo "Cloning repository..."
+              git clone -b "$BRANCH" https://github.com/pundlamahesh/SwiftProPDF.git "$APP_DIR"
+            fi
+
+            cd "$APP_DIR"
+
+            echo "Fetching latest code from $BRANCH..."
+            git fetch origin "$BRANCH"
+            git reset --hard "origin/$BRANCH"
 
             echo "Verifying .env exists..."
-            test -f .env
+            if [ ! -f .env ]; then
+              echo ".env is missing. Run the Docker Server Setup workflow first."
+              exit 1
+            fi
 
-            echo "Stopping existing containers..."
-            docker compose down || true
+            ensure_env_key() {
+              key="$1"
+              value="$2"
+              if ! grep -q "^${key}=" .env; then
+                printf '%s=%s\n' "$key" "$value" >> .env
+              fi
+            }
 
-            echo "Building latest image..."
-            docker compose build
+            ensure_env_key SWIFTPROPDF_COOKIE_SECURE "1"
+            ensure_env_key SWIFTPROPDF_ASYNC_TOOLS "1"
+            ensure_env_key SWIFTPROPDF_ASYNC_WORKER_CONCURRENCY "2"
+            ensure_env_key SWIFTPROPDF_JOBS_DIR "/app/src/SwiftProPDF/instance/jobs"
+            ensure_env_key DATABASE_URL "postgresql://swiftpropdf:swiftpropdf@postgres:5432/swiftpropdf"
+            ensure_env_key REDIS_URL "redis://redis:6379/0"
+            ensure_env_key CELERY_RESULT_BACKEND "redis://redis:6379/0"
+            ensure_env_key SWIFTPROPDF_JOB_RESULT_EXPIRES "86400"
+            ensure_env_key CLAMAV_ENABLED "1"
+            ensure_env_key CLAMAV_HOST "clamav"
+            ensure_env_key CLAMAV_PORT "3310"
+            ensure_env_key CLAMAV_TIMEOUT "30"
 
-            echo "Starting containers..."
-            docker compose up -d
+            if ! grep -q "^SWIFTPROPDF_SECRET_KEY=" .env && grep -q "^SECRET_KEY=" .env; then
+              legacy_secret="$(grep "^SECRET_KEY=" .env | tail -n 1 | cut -d= -f2-)"
+              printf '%s=%s\n' "SWIFTPROPDF_SECRET_KEY" "$legacy_secret" >> .env
+            fi
 
-            echo "Waiting for startup..."
-            sleep 15
+            if ! grep -q "^SWIFTPROPDF_SECRET_KEY=" .env; then
+              echo "SWIFTPROPDF_SECRET_KEY is missing from .env."
+              exit 1
+            fi
+
+            echo "Building and starting current Compose stack..."
+            docker compose pull postgres redis clamav || true
+            docker compose up -d --build --remove-orphans
+
+            wait_for_healthy() {
+              container="$1"
+              for attempt in $(seq 1 60); do
+                status="$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container" 2>/dev/null || true)"
+                if [ "$status" = "healthy" ] || [ "$status" = "running" ]; then
+                  echo "$container is $status"
+                  return 0
+                fi
+                echo "$container status: ${status:-missing}; waiting..."
+                sleep 5
+              done
+              echo "$container did not become healthy."
+              docker logs --tail 100 "$container" || true
+              return 1
+            }
+
+            wait_for_healthy swiftpropdf-postgres
+            wait_for_healthy swiftpropdf-redis
+            wait_for_healthy swiftpropdf-clamav
+            wait_for_healthy swiftpropdf
+            wait_for_healthy swiftpropdf-worker
 
             echo "Container status:"
-            docker ps
-
-            echo "Container health:"
             docker compose ps
 
-            echo "Recent logs:"
-            docker logs --tail 50 swiftpropdf
+            echo "Recent web logs:"
+            docker logs --tail 80 swiftpropdf || true
+
+            echo "Recent worker logs:"
+            docker logs --tail 80 swiftpropdf-worker || true
 
             echo "Cleaning Docker cache..."
-            sudo docker image prune -af
-            sudo docker builder prune -af
+            docker image prune -af
+            docker builder prune -af
 
             echo "Deployment completed successfully."

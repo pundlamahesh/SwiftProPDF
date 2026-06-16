@@ -52,6 +52,8 @@ Important environment variables:
 - `DATABASE_URL`: PostgreSQL connection URL.
 - `REDIS_URL`: Redis connection URL for Celery.
 - `SWIFTPROPDF_ASYNC_TOOLS`: set to `1` to use Redis/Celery background processing.
+- `SWIFTPROPDF_ASYNC_WORKER_CONCURRENCY`: Celery worker process count for async tools; defaults to `2`.
+- `SWIFTPROPDF_JOBS_DIR`: directory for async job input/output files shared by the web app and worker.
 - `CLAMAV_ENABLED`: set to `1` to scan uploaded files with ClamAV before processing.
 - `CLAMAV_HOST` / `CLAMAV_PORT`: ClamAV daemon connection settings.
 

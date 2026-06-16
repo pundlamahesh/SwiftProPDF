@@ -1,5 +1,5 @@
 [Unit]
-Description=SwiftProPDF Flask App
+Description=SwiftProPDF Celery Worker
 Wants=network-online.target
 After=network-online.target postgresql.service redis-server.service clamav-daemon.service
 
@@ -11,13 +11,7 @@ WorkingDirectory=/home/ubuntu/SwiftProPDF
 EnvironmentFile=/home/ubuntu/SwiftProPDF/.env
 Environment=PYTHONUNBUFFERED=1
 
-ExecStart=/home/ubuntu/venv/bin/gunicorn \
-  -w 4 \
-  -b 127.0.0.1:8000 \
-  --timeout 300 \
-  --access-logfile - \
-  --error-logfile - \
-  "SwiftProPDF.web:create_app()"
+ExecStart=/bin/sh -c 'exec /home/ubuntu/venv/bin/celery -A SwiftProPDF.web_app.celery_app:celery_app worker --loglevel=info --concurrency="${SWIFTPROPDF_ASYNC_WORKER_CONCURRENCY:-2}"'
 
 Restart=always
 RestartSec=5

@@ -56,7 +56,7 @@ from SwiftProPDF.core import (
 )
 from SwiftProPDF.database import using_postgres
 from SwiftProPDF.security.file_scanner import FileScanError, save_and_scan_upload
-from SwiftProPDF.web_app.job_service import async_tools_enabled, enqueue_tool_job, job_result, jobs_root
+from SwiftProPDF.web_app.job_service import async_job_health, async_tools_enabled, enqueue_tool_job, job_result, jobs_root
 from SwiftProPDF.web_app.tool_catalog import TOOLS, TOOLS_BY_PATH, TOOL_BY_POST_PATH, TOOL_PATHS
 
 
@@ -352,6 +352,7 @@ def create_app() -> Flask:
             user=current_user(),
             users=users,
             stats=admin_stats(app.config["DATABASE"]),
+            async_health=async_job_health(app.config["DATABASE"]),
             audit_events=list_audit_events(app.config["DATABASE"], limit=75),
             premium_users=premium_users,
             weekly_conversions=weekly_conversions,

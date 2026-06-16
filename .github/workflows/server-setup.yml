@@ -1,9 +1,12 @@
-
-
 name: Server Setup
 
 on:
   workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch to deploy after setup
+        required: true
+        default: main
 
 jobs:
   setup:
@@ -17,7 +20,13 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            set -e
+            set -euo pipefail
+
+            APP_DIR="$HOME/SwiftProPDF"
+            VENV_DIR="$HOME/venv"
+            BRANCH="${{ inputs.branch }}"
+            APP_USER="$(id -un)"
+            APP_GROUP="$(id -gn)"
 
             sudo apt update
 
@@ -28,63 +37,130 @@ jobs:
               python3-venv \
               git \
               nginx \
+              postgresql \
+              postgresql-contrib \
+              redis-server \
+              clamav \
+              clamav-daemon \
+              clamav-freshclam \
               libreoffice \
+              ghostscript \
+              libmagic1 \
+              fonts-liberation \
               certbot \
               python3-certbot-nginx
 
-            if [ ! -d "$HOME/SwiftProPDF" ]; then
-              git clone https://github.com/pundlamahesh/SwiftProPDF.git "$HOME/SwiftProPDF"
+            sudo systemctl enable postgresql redis-server
+            sudo systemctl start postgresql redis-server
+
+            sudo systemctl stop clamav-freshclam || true
+            sudo freshclam || true
+            sudo systemctl enable clamav-freshclam clamav-daemon || true
+            sudo systemctl start clamav-freshclam || true
+            sudo systemctl restart clamav-daemon || true
+
+            escaped_app_user="$(printf "%s" "$APP_USER" | sed 's/"/""/g')"
+            escaped_app_user_literal="$(printf "%s" "$APP_USER" | sed "s/'/''/g")"
+            if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname = '$escaped_app_user_literal'" | grep -q 1; then
+              sudo -u postgres psql -c "CREATE ROLE \"$escaped_app_user\" LOGIN"
             fi
-            cd "$HOME/SwiftProPDF"
-            git fetch origin
-            git reset --hard origin/main
+            if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname = 'swiftpropdf'" | grep -q 1; then
+              sudo -u postgres createdb -O "$APP_USER" swiftpropdf
+            fi
+            sudo -u postgres psql -c "ALTER DATABASE swiftpropdf OWNER TO \"$escaped_app_user\""
 
-            if [ ! -d "$HOME/venv" ]; then
-              python3 -m venv "$HOME/venv"
+            if [ ! -d "$APP_DIR/.git" ]; then
+              git clone -b "$BRANCH" https://github.com/pundlamahesh/SwiftProPDF.git "$APP_DIR"
             fi
 
-            source "$HOME/venv/bin/activate"
+            cd "$APP_DIR"
+            git fetch origin "$BRANCH"
+            git reset --hard "origin/$BRANCH"
 
-            cd "$HOME/SwiftProPDF"
+            if [ ! -d "$VENV_DIR" ]; then
+              python3 -m venv "$VENV_DIR"
+            fi
 
-            pip install --upgrade pip
-            pip install gunicorn
+            source "$VENV_DIR/bin/activate"
+            pip install --upgrade pip setuptools wheel
             pip install -e .
+            pip install "gunicorn>=21.0.0"
 
-            # Copy systemd service
-            sudo cp "$HOME/SwiftProPDF/deploy/swiftpropdf.service" /etc/systemd/system/swiftpropdf.service
+            mkdir -p "$APP_DIR/src/SwiftProPDF/instance/jobs"
+            sudo chown -R "$APP_USER:$APP_GROUP" "$APP_DIR/src/SwiftProPDF/instance"
 
-            # Copy nginx config
-            sudo cp "$HOME/SwiftProPDF/deploy/nginx.conf" /etc/nginx/sites-available/swiftpropdf
-
-            # Enable nginx site
-            sudo ln -sf /etc/nginx/sites-available/swiftpropdf /etc/nginx/sites-enabled/swiftpropdf
-
-            # Remove default nginx site
-            sudo rm -f /etc/nginx/sites-enabled/default
-
-            # Reload systemd
-            sudo systemctl daemon-reload
-
-            # Validate and start nginx
-            sudo nginx -t
-            sudo systemctl enable nginx
-            sudo systemctl reload nginx || sudo systemctl restart nginx
-            cat > "$HOME/SwiftProPDF/.env" << EOF
-            SECRET_KEY=${{ secrets.SECRET_KEY }}
+            cat > "$APP_DIR/.env" << EOF
+            SWIFTPROPDF_SECRET_KEY=${{ secrets.SWIFTPROPDF_SECRET_KEY || secrets.SECRET_KEY }}
+            SWIFTPROPDF_COOKIE_SECURE=1
+            DATABASE_URL=postgresql:///swiftpropdf
+            SWIFTPROPDF_ASYNC_TOOLS=1
+            SWIFTPROPDF_ASYNC_WORKER_CONCURRENCY=2
+            SWIFTPROPDF_JOBS_DIR=$APP_DIR/src/SwiftProPDF/instance/jobs
+            REDIS_URL=redis://localhost:6379/0
+            CELERY_RESULT_BACKEND=redis://localhost:6379/0
+            SWIFTPROPDF_JOB_RESULT_EXPIRES=86400
+            CLAMAV_ENABLED=1
+            CLAMAV_HOST=localhost
+            CLAMAV_PORT=3310
+            CLAMAV_TIMEOUT=30
             SMTP_SERVER=${{ secrets.SMTP_SERVER }}
             SMTP_PORT=${{ secrets.SMTP_PORT }}
             SMTP_USERNAME=${{ secrets.SMTP_USERNAME }}
             SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+            SMTP_USE_TLS=1
             SENDER_EMAIL=${{ secrets.SENDER_EMAIL }}
             EOF
+            chmod 600 "$APP_DIR/.env"
 
-            chmod 600 "$HOME/SwiftProPDF/.env"
+            if ! grep -q "^SWIFTPROPDF_SECRET_KEY=." "$APP_DIR/.env"; then
+              echo "Set SWIFTPROPDF_SECRET_KEY or SECRET_KEY in GitHub repository secrets."
+              exit 1
+            fi
 
-            sudo systemctl enable swiftpropdf
+            install_service() {
+              source_file="$1"
+              target_file="$2"
+              sed \
+                -e "s|/home/ubuntu|$HOME|g" \
+                -e "s|User=ubuntu|User=$APP_USER|g" \
+                -e "s|Group=ubuntu|Group=$APP_GROUP|g" \
+                "$source_file" | sudo tee "$target_file" >/dev/null
+            }
+
+            install_service "$APP_DIR/deploy/swiftpropdf.service" /etc/systemd/system/swiftpropdf.service
+            install_service "$APP_DIR/deploy/swiftpropdf-worker.service" /etc/systemd/system/swiftpropdf-worker.service
+
+            sudo cp "$APP_DIR/deploy/nginx.conf" /etc/nginx/sites-available/swiftpropdf
+            sudo ln -sf /etc/nginx/sites-available/swiftpropdf /etc/nginx/sites-enabled/swiftpropdf
+            sudo rm -f /etc/nginx/sites-enabled/default
+
+            sudo systemctl daemon-reload
+            sudo nginx -t
+            sudo systemctl enable nginx swiftpropdf swiftpropdf-worker
+            sudo systemctl restart nginx
+            sudo systemctl restart swiftpropdf-worker
             sudo systemctl restart swiftpropdf
 
-            sleep 10
+            wait_for_service() {
+              service="$1"
+              for attempt in $(seq 1 30); do
+                if sudo systemctl is-active --quiet "$service"; then
+                  echo "$service is active"
+                  return 0
+                fi
+                echo "$service is not active yet; waiting..."
+                sleep 3
+              done
+              sudo systemctl status "$service" --no-pager || true
+              return 1
+            }
+
+            wait_for_service postgresql
+            wait_for_service redis-server
+            wait_for_service nginx
+            wait_for_service swiftpropdf-worker
+            wait_for_service swiftpropdf
 
             sudo systemctl status swiftpropdf --no-pager
+            sudo systemctl status swiftpropdf-worker --no-pager
             sudo systemctl status nginx --no-pager

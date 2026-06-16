@@ -1,6 +1,6 @@
 # SwiftProPDF Deployment Guide
 
-This guide reflects the current Flask + PostgreSQL application. Docker Compose starts PostgreSQL for account, quota, audit, and session data, Redis for Celery, and a Celery worker for background file processing.
+This guide reflects the current Flask + PostgreSQL application. Docker Compose starts PostgreSQL for account, quota, audit, and session data, Redis for Celery broker/result state, ClamAV for upload scanning, and a Celery worker for background file processing.
 
 ## Local Docker Compose
 
@@ -20,7 +20,7 @@ docker compose up -d --build
 
 4. Open `http://localhost:8000`.
 
-The Compose stack starts the web app, PostgreSQL, Redis, and a Celery worker. The `swiftpropdf-postgres` Docker volume stores database data; `swiftpropdf-instance` stores generated background-job files.
+The Compose stack starts the web app, PostgreSQL, Redis, ClamAV, and a Celery worker. The worker defaults to two async tool processes; set `SWIFTPROPDF_ASYNC_WORKER_CONCURRENCY` in `.env` to raise or lower it. The `swiftpropdf-postgres` Docker volume stores database data, `swiftpropdf-redis` stores Redis persistence, `swiftpropdf-clamav` stores virus definitions, and `swiftpropdf-instance` stores generated background-job files.
 
 ## Ubuntu VPS With Nginx
 
