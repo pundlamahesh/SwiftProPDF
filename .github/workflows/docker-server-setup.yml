@@ -62,7 +62,7 @@ jobs:
             echo "Creating .env file..."
             cat > "$APP_DIR/.env" << EOF
             SWIFTPROPDF_SECRET_KEY=${{ secrets.SWIFTPROPDF_SECRET_KEY || secrets.SECRET_KEY }}
-            SWIFTPROPDF_COOKIE_SECURE=1
+            SWIFTPROPDF_COOKIE_SECURE=0
             POSTGRES_DB=swiftpropdf
             POSTGRES_USER=swiftpropdf_dbuser
             POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
