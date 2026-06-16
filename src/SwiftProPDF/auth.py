@@ -428,6 +428,10 @@ def is_user_session_active(database_path: Path, user_id: int, session_token: str
             """,
             (user_id, session_token, now.isoformat()),
         ).fetchone()
+        print(
+            f"DEBUG CHECK user_id={user_id} token={session_token} found={row is not None}",
+            flush=True,
+        )
         if row is None:
             return False
 
