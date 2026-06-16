@@ -3,14 +3,14 @@ services:
     image: postgres:16-alpine
     container_name: swiftpropdf-postgres
     environment:
-      POSTGRES_DB: swiftpropdf
-      POSTGRES_USER: swiftpropdf
-      POSTGRES_PASSWORD: swiftpropdf
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - swiftpropdf-postgres:/var/lib/postgresql/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U swiftpropdf -d swiftpropdf"]
+      test: ["CMD-SHELL", "pg_isready -U swiftpropdf_dbuser -d swiftpropdf"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -50,7 +50,6 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql://swiftpropdf:swiftpropdf@postgres:5432/swiftpropdf
       REDIS_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
       SWIFTPROPDF_ASYNC_TOOLS: "1"
@@ -88,7 +87,6 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql://swiftpropdf:swiftpropdf@postgres:5432/swiftpropdf
       REDIS_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
       SWIFTPROPDF_ASYNC_TOOLS: "1"
@@ -98,7 +96,15 @@ services:
       CLAMAV_HOST: clamav
       CLAMAV_PORT: "3310"
       CLAMAV_TIMEOUT: "30"
-    command: ["celery", "-A", "SwiftProPDF.web_app.celery_app:celery_app", "worker", "--loglevel=info", "--concurrency=${SWIFTPROPDF_ASYNC_WORKER_CONCURRENCY:-2}"]
+    command:
+      [
+        "celery",
+        "-A",
+        "SwiftProPDF.web_app.celery_app:celery_app",
+        "worker",
+        "--loglevel=info",
+        "--concurrency=${SWIFTPROPDF_ASYNC_WORKER_CONCURRENCY:-2}"
+      ]
     volumes:
       - swiftpropdf-instance:/app/src/SwiftProPDF/instance
     depends_on:

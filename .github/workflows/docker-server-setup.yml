@@ -63,7 +63,11 @@ jobs:
             cat > "$APP_DIR/.env" << EOF
             SWIFTPROPDF_SECRET_KEY=${{ secrets.SWIFTPROPDF_SECRET_KEY || secrets.SECRET_KEY }}
             SWIFTPROPDF_COOKIE_SECURE=1
-            DATABASE_URL=postgresql://swiftpropdf:swiftpropdf@postgres:5432/swiftpropdf
+            POSTGRES_DB=swiftpropdf
+            POSTGRES_USER=swiftpropdf_dbuser
+            POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+
+            DATABASE_URL=postgresql://swiftpropdf_dbuser:${{ secrets.POSTGRES_PASSWORD_URLENCODED }}@postgres:5432/swiftpropdf
             SWIFTPROPDF_ASYNC_TOOLS=1
             SWIFTPROPDF_ASYNC_WORKER_CONCURRENCY=2
             SWIFTPROPDF_JOBS_DIR=/app/src/SwiftProPDF/instance/jobs
@@ -118,6 +122,10 @@ jobs:
             wait_for_healthy swiftpropdf-postgres
             wait_for_healthy swiftpropdf-redis
             wait_for_healthy swiftpropdf-clamav
+
+            echo "Running Alembic migrations..."
+            sudo docker compose run --rm swiftpropdf alembic upgrade head
+
             wait_for_healthy swiftpropdf
             wait_for_healthy swiftpropdf-worker
 
