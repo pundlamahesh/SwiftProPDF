@@ -18,9 +18,15 @@ services:
   redis:
     image: redis:7-alpine
     container_name: swiftpropdf-redis
+    command: ["redis-server", "--appendonly", "yes"]
     restart: unless-stopped
     volumes:
       - swiftpropdf-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   clamav:
     image: clamav/clamav:stable
@@ -28,12 +34,19 @@ services:
     restart: unless-stopped
     volumes:
       - swiftpropdf-clamav:/var/lib/clamav
+    healthcheck:
+      test: ["CMD-SHELL", "clamdscan --no-summary /etc/hosts >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 20s
+      retries: 10
+      start_period: 90s
 
   swiftpropdf:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: swiftpropdf
+    init: true
     env_file:
       - .env
     environment:
@@ -41,9 +54,12 @@ services:
       REDIS_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
       SWIFTPROPDF_ASYNC_TOOLS: "1"
+      SWIFTPROPDF_ASYNC_WORKER_CONCURRENCY: "${SWIFTPROPDF_ASYNC_WORKER_CONCURRENCY:-2}"
+      SWIFTPROPDF_JOBS_DIR: /app/src/SwiftProPDF/instance/jobs
       CLAMAV_ENABLED: "1"
       CLAMAV_HOST: clamav
       CLAMAV_PORT: "3310"
+      CLAMAV_TIMEOUT: "30"
     ports:
       - "8000:8000"
     volumes:
@@ -52,9 +68,9 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
       clamav:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/').read()"]
@@ -68,6 +84,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: swiftpropdf-worker
+    init: true
     env_file:
       - .env
     environment:
@@ -75,19 +92,28 @@ services:
       REDIS_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
       SWIFTPROPDF_ASYNC_TOOLS: "1"
+      SWIFTPROPDF_ASYNC_WORKER_CONCURRENCY: "${SWIFTPROPDF_ASYNC_WORKER_CONCURRENCY:-2}"
+      SWIFTPROPDF_JOBS_DIR: /app/src/SwiftProPDF/instance/jobs
       CLAMAV_ENABLED: "1"
       CLAMAV_HOST: clamav
       CLAMAV_PORT: "3310"
-    command: ["celery", "-A", "SwiftProPDF.web_app.celery_app:celery_app", "worker", "--loglevel=info"]
+      CLAMAV_TIMEOUT: "30"
+    command: ["celery", "-A", "SwiftProPDF.web_app.celery_app:celery_app", "worker", "--loglevel=info", "--concurrency=${SWIFTPROPDF_ASYNC_WORKER_CONCURRENCY:-2}"]
     volumes:
       - swiftpropdf-instance:/app/src/SwiftProPDF/instance
     depends_on:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
       clamav:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A SwiftProPDF.web_app.celery_app:celery_app inspect ping -d celery@$$HOSTNAME --timeout=5 | grep -q pong"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     restart: unless-stopped
 
 volumes:

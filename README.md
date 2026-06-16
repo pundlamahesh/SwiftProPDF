@@ -130,7 +130,7 @@ Build and run:
 docker compose up --build
 ```
 
-The app listens on `http://localhost:8000`. The compose file starts the web app, PostgreSQL, Redis, ClamAV, and a Celery worker. PostgreSQL data is persisted with the `swiftpropdf-postgres` volume; generated background-job files are persisted with the `swiftpropdf-instance` volume.
+The app listens on `http://localhost:8000`. The compose file starts the web app, PostgreSQL, Redis, ClamAV, and a Celery worker. PostgreSQL data is persisted with the `swiftpropdf-postgres` volume, Redis state with `swiftpropdf-redis`, ClamAV definitions with `swiftpropdf-clamav`, and generated background-job files with `swiftpropdf-instance`.
 
 ## Background Processing
 
@@ -140,6 +140,8 @@ SwiftProPDF supports both processing modes:
   The existing Flask routes process each upload and return the generated file directly.
 - Async mode: `SWIFTPROPDF_ASYNC_TOOLS=1`
   Tool form submissions are queued through Celery, Redis stores broker/result state, the browser polls job status, and the finished file downloads when ready.
+
+Set `SWIFTPROPDF_ASYNC_WORKER_CONCURRENCY` to control how many Celery worker processes run async tool jobs. It defaults to `2` to keep CPU usage predictable.
 
 Docker Compose enables async mode automatically. Local development can keep normal mode unless Redis and a Celery worker are running.
 

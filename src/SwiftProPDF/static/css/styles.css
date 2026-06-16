@@ -687,6 +687,63 @@ select {
     margin: 8px 0;
 }
 
+.metric-card__value--status {
+    font-size: 1.35rem;
+}
+
+.admin-ops-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 18px;
+    margin-bottom: 18px;
+}
+
+.ops-card {
+    align-items: flex-start;
+}
+
+.ops-errors-panel {
+    margin-top: 0;
+}
+
+.ops-error-list {
+    display: grid;
+    gap: 12px;
+}
+
+.ops-error-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 0;
+    border-top: 1px solid var(--border);
+}
+
+.ops-error-item:first-child {
+    border-top: 0;
+    padding-top: 0;
+}
+
+.ops-error-item strong,
+.ops-error-item span {
+    display: block;
+}
+
+.ops-error-item strong {
+    line-height: 1.4;
+}
+
+.ops-error-item span,
+.ops-error-item time {
+    color: var(--ink-muted);
+    font-size: 0.9rem;
+}
+
+.ops-error-item time {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
 .admin-panel-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1157,6 +1214,7 @@ select {
     }
 
     .admin-hero-grid,
+    .admin-ops-grid,
     .admin-panel-grid,
     .card--split {
         grid-template-columns: 1fr;
@@ -1800,7 +1858,7 @@ body.dark-mode .status-pill--muted {
 
 .hero-stats {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 14px;
 }
 
@@ -1813,7 +1871,7 @@ body.dark-mode .status-pill--muted {
 
 .hero-stats strong {
     display: block;
-    font-size: 1.35rem;
+    font-size: 1.05rem;
     line-height: 1.1;
     margin-bottom: 4px;
 }
@@ -1821,6 +1879,7 @@ body.dark-mode .status-pill--muted {
 .hero-stats p {
     margin: 0;
     line-height: 1.25;
+    font-size: 0.9rem;
 }
 
 .tools-section,

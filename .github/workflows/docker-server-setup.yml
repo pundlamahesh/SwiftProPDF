@@ -2,6 +2,11 @@ name: Docker Server Setup
 
 on:
   workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch to deploy after setup
+        required: true
+        default: main
 
 jobs:
   setup:
@@ -15,84 +20,108 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            set -e
+            set -euo pipefail
+
+            APP_DIR="$HOME/SwiftProPDF"
+            BRANCH="${{ inputs.branch }}"
 
             echo "Updating packages..."
             sudo apt update
 
             echo "Installing required packages..."
-
             sudo apt install -y \
-            git \
-            nginx \
-            docker.io \
-            docker-compose-v2 \
-            snapd
+              ca-certificates \
+              curl \
+              git \
+              nginx \
+              docker.io \
+              docker-compose-v2 \
+              snapd
 
             echo "Installing latest Certbot..."
             sudo snap install core || true
             sudo snap refresh core || true
             sudo snap install --classic certbot || true
-
             sudo ln -sf /snap/bin/certbot /usr/bin/certbot
-
-            echo "Certbot version:"
             certbot --version
 
             echo "Starting Docker..."
             sudo systemctl enable docker
             sudo systemctl start docker
-
-            echo "Adding ubuntu user to docker group..."
-            sudo usermod -aG docker ubuntu || true
+            sudo usermod -aG docker "$(id -un)" || true
 
             echo "Cloning repository..."
-            if [ ! -d "$HOME/SwiftProPDF" ]; then
-              git clone -b docker-migration \
-                https://github.com/pundlamahesh/SwiftProPDF.git \
-                "$HOME/SwiftProPDF"
+            if [ ! -d "$APP_DIR/.git" ]; then
+              git clone -b "$BRANCH" https://github.com/pundlamahesh/SwiftProPDF.git "$APP_DIR"
             fi
 
-            cd "$HOME/SwiftProPDF"
-
-            git fetch origin
-            git reset --hard origin/docker-migration
+            cd "$APP_DIR"
+            git fetch origin "$BRANCH"
+            git reset --hard "origin/$BRANCH"
 
             echo "Creating .env file..."
-
-            cat > "$HOME/SwiftProPDF/.env" << EOF
-            SECRET_KEY=${{ secrets.SECRET_KEY }}
+            cat > "$APP_DIR/.env" << EOF
+            SWIFTPROPDF_SECRET_KEY=${{ secrets.SWIFTPROPDF_SECRET_KEY || secrets.SECRET_KEY }}
+            SWIFTPROPDF_COOKIE_SECURE=1
+            DATABASE_URL=postgresql://swiftpropdf:swiftpropdf@postgres:5432/swiftpropdf
+            SWIFTPROPDF_ASYNC_TOOLS=1
+            SWIFTPROPDF_ASYNC_WORKER_CONCURRENCY=2
+            SWIFTPROPDF_JOBS_DIR=/app/src/SwiftProPDF/instance/jobs
+            REDIS_URL=redis://redis:6379/0
+            CELERY_RESULT_BACKEND=redis://redis:6379/0
+            SWIFTPROPDF_JOB_RESULT_EXPIRES=86400
+            CLAMAV_ENABLED=1
+            CLAMAV_HOST=clamav
+            CLAMAV_PORT=3310
+            CLAMAV_TIMEOUT=30
             SMTP_SERVER=${{ secrets.SMTP_SERVER }}
             SMTP_PORT=${{ secrets.SMTP_PORT }}
             SMTP_USERNAME=${{ secrets.SMTP_USERNAME }}
             SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+            SMTP_USE_TLS=1
             SENDER_EMAIL=${{ secrets.SENDER_EMAIL }}
             EOF
+            chmod 600 "$APP_DIR/.env"
+
+            if ! grep -q "^SWIFTPROPDF_SECRET_KEY=." "$APP_DIR/.env"; then
+              echo "Set SWIFTPROPDF_SECRET_KEY or SECRET_KEY in GitHub repository secrets."
+              exit 1
+            fi
 
             echo "Configuring Nginx..."
-
-            sudo cp \
-              "$HOME/SwiftProPDF/deploy/nginx.conf" \
-              /etc/nginx/sites-available/swiftpropdf
-
-            sudo ln -sf \
-              /etc/nginx/sites-available/swiftpropdf \
-              /etc/nginx/sites-enabled/swiftpropdf
-
+            sudo cp "$APP_DIR/deploy/nginx.conf" /etc/nginx/sites-available/swiftpropdf
+            sudo ln -sf /etc/nginx/sites-available/swiftpropdf /etc/nginx/sites-enabled/swiftpropdf
             sudo rm -f /etc/nginx/sites-enabled/default
-
             sudo nginx -t
-
             sudo systemctl enable nginx
             sudo systemctl restart nginx
 
-            echo "Building Docker image..."
+            echo "Building and starting Docker Compose stack..."
+            sudo docker compose up -d --build --remove-orphans
 
-            sudo docker compose up -d --build
+            wait_for_healthy() {
+              container="$1"
+              for attempt in $(seq 1 60); do
+                status="$(sudo docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container" 2>/dev/null || true)"
+                if [ "$status" = "healthy" ] || [ "$status" = "running" ]; then
+                  echo "$container is $status"
+                  return 0
+                fi
+                echo "$container status: ${status:-missing}; waiting..."
+                sleep 5
+              done
+              echo "$container did not become healthy."
+              sudo docker logs --tail 100 "$container" || true
+              return 1
+            }
 
-            echo "Waiting for startup..."
-            sleep 20
+            wait_for_healthy swiftpropdf-postgres
+            wait_for_healthy swiftpropdf-redis
+            wait_for_healthy swiftpropdf-clamav
+            wait_for_healthy swiftpropdf
+            wait_for_healthy swiftpropdf-worker
 
-            sudo docker ps
+            sudo docker compose ps
+            sudo systemctl status nginx --no-pager
 
             echo "Server setup completed successfully."
