@@ -1869,15 +1869,6 @@ body.dark-mode .status-pill--muted {
     border: 1px solid var(--border);
 }
 
-.hero-stats > .hero-stat-primary {
-    background: rgba(37, 99, 235, 0.12);
-    border-color: rgba(37, 99, 235, 0.24);
-}
-
-.hero-stats > .hero-stat-primary strong {
-    color: var(--accent-dark);
-}
-
 .hero-stats strong {
     display: block;
     font-size: 1.05rem;
