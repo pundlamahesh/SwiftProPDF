@@ -124,7 +124,86 @@ function setStatus(statusBox, message, type) {
     if (!statusBox) return;
     statusBox.hidden = false;
     statusBox.textContent = message;
-    statusBox.className = type === 'error' ? 'alert' : 'status';
+    statusBox.className = type === 'error' ? 'alert alert-error' : 'status';
+}
+
+function getUploadLimit() {
+    const bytes = Number(document.body?.dataset.maxUploadBytes);
+    const mb = Number(document.body?.dataset.maxUploadMb);
+
+    return {
+        bytes: Number.isFinite(bytes) && bytes > 0 ? bytes : 200 * 1024 * 1024,
+        mb: Number.isFinite(mb) && mb > 0 ? mb : 200,
+        message: document.body?.dataset.uploadTooLargeMessage || 'File is too large. Please upload files up to 200 MB.',
+    };
+}
+
+function formatFileSize(bytes) {
+    return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+}
+
+function findStatusBox(form) {
+    if (!form) return null;
+    return form.querySelector('.form-status')
+        || form.closest('.form-card, .tool-form-card, .tool-panel, section')?.querySelector('[data-status]')
+        || form.parentElement?.querySelector('[data-status]');
+}
+
+function getSelectedFiles(form) {
+    if (!form) return [];
+    return [...form.querySelectorAll('input[type="file"]')]
+        .flatMap((input) => [...input.files]);
+}
+
+function getUploadSizeError(files) {
+    if (!files.length) return '';
+
+    const limit = getUploadLimit();
+    const oversizedFile = files.find((file) => file.size > limit.bytes);
+    if (oversizedFile) {
+        return `${limit.message} ${oversizedFile.name} is ${formatFileSize(oversizedFile.size)}.`;
+    }
+
+    const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+    if (totalSize > limit.bytes) {
+        return `Selected files are too large together. Please upload up to ${limit.mb} MB per request.`;
+    }
+
+    return '';
+}
+
+function clearUploadSizeStatus(statusBox) {
+    if (!statusBox || statusBox.dataset.uploadSizeError !== 'true') return;
+    statusBox.hidden = true;
+    statusBox.textContent = '';
+    statusBox.className = 'status';
+    delete statusBox.dataset.uploadSizeError;
+}
+
+function validateFileInputs(form, statusBox = findStatusBox(form)) {
+    if (!form) return true;
+
+    const message = getUploadSizeError(getSelectedFiles(form));
+    form.querySelectorAll('input[type="file"]').forEach((input) => {
+        input.setCustomValidity(message);
+    });
+
+    if (!message) {
+        clearUploadSizeStatus(statusBox);
+        return true;
+    }
+
+    setStatus(statusBox, message, 'error');
+    if (statusBox) {
+        statusBox.dataset.uploadSizeError = 'true';
+    }
+    return false;
+}
+
+function validateFileInput(input) {
+    const form = input?.form;
+    if (!form) return true;
+    return validateFileInputs(form);
 }
 
 function getDownloadName(response) {
@@ -216,6 +295,7 @@ function clearFilePreviews(form) {
 
     form.querySelectorAll('input[type="file"]').forEach((input) => {
         input.value = '';
+        input.setCustomValidity('');
     });
 
     if (typeof selectedHomepageFile !== 'undefined') {
@@ -238,7 +318,7 @@ async function readError(response) {
             // Fall through to the status-based message below.
         }
         if (response.status === 413) {
-            return 'The file is too large for this server.';
+            return getUploadLimit().message;
         }
         if (response.status >= 500) {
             return 'The server hit an error while processing this file.';
@@ -248,13 +328,14 @@ async function readError(response) {
 }
 
 function setupDownloadForm(form) {
-    const statusBox = form.querySelector('.form-status');
+    const statusBox = findStatusBox(form);
     const button = form.querySelector('button[type="submit"]');
     const originalLabel = button?.textContent || 'Submit';
 
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
         if (!button) return;
+        if (!validateFileInputs(form, statusBox)) return;
 
         button.disabled = true;
         button.textContent = 'Processing...';
@@ -345,6 +426,7 @@ function bindDropzone(dropzone) {
 
     fileInput?.addEventListener('change', () => {
         updateSelection(fileInput.files);
+        validateFileInput(fileInput);
     });
 
     const openFilePicker = () => fileInput?.click();
@@ -377,6 +459,7 @@ function bindDropzone(dropzone) {
         if (droppedFiles?.length && fileInput) {
             fileInput.files = droppedFiles;
             updateSelection(droppedFiles);
+            validateFileInput(fileInput);
         }
     });
 }
@@ -456,6 +539,17 @@ function initToolsMenu() {
 function initForms() {
     document.querySelectorAll('[data-download-form]').forEach(setupDownloadForm);
     document.querySelectorAll('[data-dropzone]').forEach(bindDropzone);
+}
+
+function initUploadSizeValidation() {
+    document.querySelectorAll('form[enctype="multipart/form-data"]').forEach((form) => {
+        if (form.matches('[data-download-form]')) return;
+        form.addEventListener('submit', (event) => {
+            if (validateFileInputs(form)) return;
+            event.preventDefault();
+            form.reportValidity?.();
+        });
+    });
 }
 
 function initThemeToggle() {
@@ -747,6 +841,7 @@ function initFileInputPreviews() {
     document.querySelectorAll('input[type="file"]').forEach((input) => {
         input.addEventListener('change', () => {
             const existing = input.parentElement.querySelector('.selected-file-name');
+            validateFileInput(input);
 
             if (existing) {
                 existing.remove();
@@ -776,6 +871,8 @@ function initFileInputPreviews() {
 if (removeBtn) {
     removeBtn.addEventListener('click', () => {
         input.value = '';
+        input.setCustomValidity('');
+        clearUploadSizeStatus(findStatusBox(input.form));
         preview.remove();
     });
 }
@@ -788,6 +885,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initDropdowns();
     initToolsMenu();
     initForms();
+    initUploadSizeValidation();
     initThemeToggle();
     initAdminSidebarToggle();
     initAdminTableSearch();

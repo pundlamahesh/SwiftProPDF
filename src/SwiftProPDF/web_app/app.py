@@ -60,6 +60,12 @@ from SwiftProPDF.web_app.job_service import async_job_health, async_tools_enable
 from SwiftProPDF.web_app.tool_catalog import TOOLS, TOOLS_BY_PATH, TOOL_BY_POST_PATH, TOOL_PATHS
 
 
+DEFAULT_MAX_UPLOAD_MB = 200
+
+
+def upload_too_large_message(max_size_mb: int) -> str:
+    return f"File is too large. Please upload files up to {max_size_mb} MB."
+
 
 def load_env_file() -> None:
     env_path = Path.cwd() / ".env"
@@ -77,7 +83,7 @@ def load_env_file() -> None:
 def create_app() -> Flask:
     load_env_file()
     app = Flask(__name__, template_folder="../templates", static_folder="../static")
-    max_upload_mb = int(os.getenv("MAX_UPLOAD_MB", "200"))
+    max_upload_mb = int(os.getenv("MAX_UPLOAD_MB", str(DEFAULT_MAX_UPLOAD_MB)))
     app.config["MAX_CONTENT_LENGTH"] = max_upload_mb * 1024 * 1024
     package_root = Path(app.root_path).parent
     package_instance = package_root / "instance"
@@ -108,6 +114,9 @@ def create_app() -> Flask:
             "remaining_quota": get_remaining_quota(),
             "usage_limit": get_usage_limit(),
             "quota_message": get_quota_message(),
+            "max_upload_mb": max_upload_mb,
+            "max_upload_bytes": app.config["MAX_CONTENT_LENGTH"],
+            "upload_too_large_message": upload_too_large_message(max_upload_mb),
         }
 
     tools = TOOLS
@@ -265,6 +274,8 @@ def create_app() -> Flask:
                 app.config["DATABASE"],
                 current_actor(),
             )
+        except RequestEntityTooLarge:
+            raise
         except Exception:
             app.logger.exception("Could not queue background tool job")
             return jsonify({"error": "Could not start the background job. Please try again."}), 503
@@ -324,7 +335,7 @@ def create_app() -> Flask:
     @app.errorhandler(RequestEntityTooLarge)
     def handle_upload_too_large(exc):
         max_size_mb = max(1, app.config["MAX_CONTENT_LENGTH"] // (1024 * 1024))
-        return error_response(f"File is too large. Upload files up to {max_size_mb} MB.", 413)
+        return error_response(upload_too_large_message(max_size_mb), 413)
 
     @app.errorhandler(FileScanError)
     def handle_file_scan_error(exc):

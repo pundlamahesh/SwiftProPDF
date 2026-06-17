@@ -6,7 +6,11 @@
     <title>SwiftProPDF - Fast PDF Tools</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css', v='7') }}">
 </head>
-<body>
+<body
+    data-max-upload-bytes="{{ max_upload_bytes }}"
+    data-max-upload-mb="{{ max_upload_mb }}"
+    data-upload-too-large-message="{{ upload_too_large_message }}"
+>
     <main class="app-shell">
         <header class="hero hero-premium">
             <nav class="topbar" aria-label="Primary">

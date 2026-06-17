@@ -17,7 +17,12 @@
     {% block extra_head %}{% endblock %}
 </head>
 
-<body class="theme-light">
+<body
+    class="theme-light"
+    data-max-upload-bytes="{{ max_upload_bytes }}"
+    data-max-upload-mb="{{ max_upload_mb }}"
+    data-upload-too-large-message="{{ upload_too_large_message }}"
+>
     <div class="site-shell">
         <header class="site-header">
             <div class="header-inner">
