@@ -84,6 +84,30 @@ function setupHomePhotoSlider() {
     }
     body.appendChild(slider);
 
+    const uploadLimit = getUploadLimit();
+    const trustStrip = document.createElement('div');
+    trustStrip.className = 'home-trust-strip';
+    trustStrip.setAttribute('aria-label', 'Upload trust information');
+    trustStrip.innerHTML = `
+        <div class="home-trust-item">
+            <span>${uploadLimit.mb} MB</span>
+            <strong>Max file size</strong>
+        </div>
+        <div class="home-trust-item">
+            <span>Private</span>
+            <strong>Temporary processing</strong>
+        </div>
+        <div class="home-trust-item">
+            <span>Guest</span>
+            <strong>No forced login</strong>
+        </div>
+        <div class="home-trust-item">
+            <span>Secure</span>
+            <strong>Checked uploads</strong>
+        </div>
+    `;
+    body.appendChild(trustStrip);
+
     const slides = [...slider.querySelectorAll('.home-photo-slide')];
     const dots = [...slider.querySelectorAll('.home-photo-dots button')];
     let activeIndex = 0;

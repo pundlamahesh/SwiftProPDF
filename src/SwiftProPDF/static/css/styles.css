@@ -1777,7 +1777,44 @@ body.dark-mode .status-pill--muted {
 }
 
 .home-preview-body {
+    display: grid;
+    gap: 12px;
+}
+
+.home-trust-strip {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--border);
+}
+
+.home-trust-item {
+    min-width: 0;
+    padding: 12px 14px;
+    background: var(--surface-strong);
+}
+
+.home-trust-item span,
+.home-trust-item strong {
     display: block;
+    overflow-wrap: anywhere;
+}
+
+.home-trust-item span {
+    margin-bottom: 4px;
+    color: var(--accent-dark);
+    font-size: 0.8rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.home-trust-item strong {
+    color: var(--ink);
+    font-size: 0.92rem;
+    line-height: 1.2;
 }
 
 .upload-head {
@@ -2016,6 +2053,10 @@ body.dark-mode .status-pill--muted {
 
     .hero-stats {
         grid-template-columns: 1fr;
+    }
+
+    .home-trust-strip {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 
