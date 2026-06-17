@@ -1,5 +1,10 @@
 import os
+from os import path
 from pathlib import Path
+from xmlrpc import client
+
+from alembic.util import status
+from celery import result, signature
 
 
 class FileScanError(Exception):
@@ -22,7 +27,9 @@ def scan_file(path: Path | str) -> None:
     try:
         import clamd
     except ImportError as exc:
-        raise FileScanError("Antivirus scanning is enabled but clamd is not installed.") from exc
+        raise FileScanError(
+            "Antivirus scanning is enabled but clamd is not installed."
+        ) from exc
 
     client = clamd.ClamdNetworkSocket(
         host=os.getenv("CLAMAV_HOST", "localhost"),
@@ -32,16 +39,22 @@ def scan_file(path: Path | str) -> None:
 
     try:
         client.ping()
-        result = client.scan(str(path))
+
+        with open(path, "rb") as file_handle:
+            result = client.instream(file_handle)
+
     except Exception as exc:
-        raise FileScanError("Could not scan uploaded file.") from exc
+        raise FileScanError(f"Could not scan uploaded file: {exc}") from exc
 
     if not result:
         return
 
     status, signature = next(iter(result.values()))
+
     if status != "OK":
-        raise FileScanError(f"Uploaded file failed antivirus scan: {signature}")
+        raise FileScanError(
+            f"Uploaded file failed antivirus scan: {signature}"
+        )
 
 
 def save_and_scan_upload(uploaded_file, input_path: Path | str) -> None:
