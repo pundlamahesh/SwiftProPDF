@@ -33,7 +33,10 @@ services:
       retries: 5
 
   clamav:
-    image: clamav/clamav:stable
+    build:
+      context: .
+      dockerfile: Dockerfile.clamav
+    image: swiftpropdf-clamav
     container_name: swiftpropdf-clamav
     restart: unless-stopped
     volumes:
@@ -59,10 +62,10 @@ services:
       SWIFTPROPDF_ASYNC_TOOLS: "1"
       SWIFTPROPDF_ASYNC_WORKER_CONCURRENCY: "${SWIFTPROPDF_ASYNC_WORKER_CONCURRENCY:-2}"
       SWIFTPROPDF_JOBS_DIR: /app/src/SwiftProPDF/instance/jobs
-      CLAMAV_ENABLED: "1"
-      CLAMAV_HOST: clamav
-      CLAMAV_PORT: "3310"
-      CLAMAV_TIMEOUT: "30"
+      CLAMAV_ENABLED: ${CLAMAV_ENABLED:-1}
+      CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
+      CLAMAV_PORT: ${CLAMAV_PORT:-3310}
+      CLAMAV_TIMEOUT: ${CLAMAV_TIMEOUT:-30}
     ports:
       - "8000:8000"
     volumes:
@@ -96,10 +99,10 @@ services:
       SWIFTPROPDF_ASYNC_TOOLS: "1"
       SWIFTPROPDF_ASYNC_WORKER_CONCURRENCY: "${SWIFTPROPDF_ASYNC_WORKER_CONCURRENCY:-2}"
       SWIFTPROPDF_JOBS_DIR: /app/src/SwiftProPDF/instance/jobs
-      CLAMAV_ENABLED: "1"
-      CLAMAV_HOST: clamav
-      CLAMAV_PORT: "3310"
-      CLAMAV_TIMEOUT: "30"
+      CLAMAV_ENABLED: ${CLAMAV_ENABLED:-1}
+      CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
+      CLAMAV_PORT: ${CLAMAV_PORT:-3310}
+      CLAMAV_TIMEOUT: ${CLAMAV_TIMEOUT:-30}
     command:
       [
         "celery",

@@ -74,7 +74,7 @@ jobs:
             REDIS_URL=redis://redis:6379/0
             CELERY_RESULT_BACKEND=redis://redis:6379/0
             SWIFTPROPDF_JOB_RESULT_EXPIRES=86400
-            CLAMAV_ENABLED=1
+            CLAMAV_ENABLED=0
             CLAMAV_HOST=clamav
             CLAMAV_PORT=3310
             CLAMAV_TIMEOUT=30

@@ -1,0 +1,5 @@
+FROM clamav/clamav:stable
+
+RUN sed -i 's/^#StreamMaxLength.*/StreamMaxLength 200M/' /etc/clamav/clamd.conf && \
+    sed -i 's/^#MaxFileSize.*/MaxFileSize 200M/' /etc/clamav/clamd.conf && \
+    sed -i 's/^#MaxScanSize.*/MaxScanSize 200M/' /etc/clamav/clamd.conf
