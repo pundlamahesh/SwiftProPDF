@@ -179,10 +179,10 @@ def create_app() -> Flask:
     def get_usage_limit() -> int:
         user = current_user()
         if user is None:
-            return int(get_setting(app.config["DATABASE"], "guest_weekly_limit", "5") or 5)
+            return int(get_setting(app.config["DATABASE"], "guest_weekly_limit", "20") or 20)
         if user["is_admin"] or user["is_premium"]:
             return 0
-        return int(get_setting(app.config["DATABASE"], "free_weekly_limit", "10") or 10)
+        return int(get_setting(app.config["DATABASE"], "free_weekly_limit", "30") or 30)
 
     def get_current_usage() -> int:
         user = current_user()
@@ -367,8 +367,8 @@ def create_app() -> Flask:
             audit_events=list_audit_events(app.config["DATABASE"], limit=75),
             premium_users=premium_users,
             weekly_conversions=weekly_conversions,
-            guest_weekly_limit=get_setting(app.config["DATABASE"], "guest_weekly_limit", "5"),
-            free_weekly_limit=get_setting(app.config["DATABASE"], "free_weekly_limit", "10"),
+            guest_weekly_limit=get_setting(app.config["DATABASE"], "guest_weekly_limit", "20"),
+            free_weekly_limit=get_setting(app.config["DATABASE"], "free_weekly_limit", "30"),
             premium_weekly_limit=get_setting(app.config["DATABASE"], "premium_weekly_limit", "0"),
             error=error,
             success=success,
@@ -826,8 +826,8 @@ def create_app() -> Flask:
     @app.post("/admin/settings")
     @admin_required
     def admin_update_settings():
-        guest_limit = request.form.get("guest_weekly_limit", "5").strip() or "0"
-        free_limit = request.form.get("free_weekly_limit", "10").strip() or "0"
+        guest_limit = request.form.get("guest_weekly_limit", "20").strip() or "0"
+        free_limit = request.form.get("free_weekly_limit", "30").strip() or "0"
         premium_limit = request.form.get("premium_weekly_limit", "0").strip() or "0"
         reset_quota = request.form.get("reset_quota") == "on"
 

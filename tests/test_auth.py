@@ -19,8 +19,8 @@ def test_weekly_settings_are_initialized(tmp_path: Path) -> None:
     init_db(db_path)
     ensure_default_settings(db_path)
 
-    assert get_setting(db_path, "guest_weekly_limit") == "5"
-    assert get_setting(db_path, "free_weekly_limit") == "10"
+    assert get_setting(db_path, "guest_weekly_limit") == "20"
+    assert get_setting(db_path, "free_weekly_limit") == "30"
     assert get_setting(db_path, "premium_weekly_limit") == "0"
 
 

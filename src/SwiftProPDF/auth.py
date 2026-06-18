@@ -725,8 +725,8 @@ def set_setting(database_path: Path, key: str, value: str) -> None:
 
 def ensure_default_settings(database_path: Path) -> None:
     defaults = {
-        "guest_weekly_limit": "5",
-        "free_weekly_limit": "10",
+        "guest_weekly_limit": "20",
+        "free_weekly_limit": "30",
         "premium_weekly_limit": "0",
         "last_weekly_reset": "1970-01-01T00:00:00+00:00",
     }
