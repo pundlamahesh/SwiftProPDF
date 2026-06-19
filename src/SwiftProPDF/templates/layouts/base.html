@@ -14,6 +14,10 @@
     <meta property="og:url" content="{{ request.url }}">
     <meta property="og:image" content="{{ url_for('static', filename='images/logo.svg', _external=True) }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    {% if not user or user.is_free %}
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1377318505497346"
+        crossorigin="anonymous"></script>
+    {% endif %}
     {% block extra_head %}{% endblock %}
 </head>
 

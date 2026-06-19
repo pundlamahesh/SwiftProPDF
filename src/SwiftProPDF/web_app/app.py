@@ -1,4 +1,5 @@
 import argparse
+import ipaddress
 import os
 import shutil
 import tempfile
@@ -62,10 +63,39 @@ from SwiftProPDF.web_app.tool_catalog import TOOLS, TOOLS_BY_PATH, TOOL_BY_POST_
 
 
 DEFAULT_MAX_UPLOAD_MB = 200
+DEFAULT_BROWSER_HIT_IGNORED_IPS = ("127.0.0.0/8",)
 
 
 def upload_too_large_message(max_size_mb: int) -> str:
     return f"File is too large. Please upload files up to {max_size_mb} MB."
+
+
+def configured_browser_hit_ignored_ips() -> tuple[str, ...]:
+    raw_value = os.getenv("SWIFTPROPDF_BROWSER_HIT_IGNORED_IPS")
+    if raw_value is None:
+        return DEFAULT_BROWSER_HIT_IGNORED_IPS
+    return tuple(ip.strip() for ip in raw_value.split(",") if ip.strip())
+
+
+def is_browser_hit_ignored_ip(ip_address: str, ignored_ips: tuple[str, ...]) -> bool:
+    candidate = ip_address.strip()
+    if not candidate:
+        return False
+
+    try:
+        candidate_ip = ipaddress.ip_address(candidate)
+    except ValueError:
+        return False
+
+    for ignored_ip in ignored_ips:
+        if candidate == ignored_ip:
+            return True
+        try:
+            if candidate_ip in ipaddress.ip_network(ignored_ip, strict=False):
+                return True
+        except ValueError:
+            continue
+    return False
 
 
 def load_env_file() -> None:
@@ -103,6 +133,7 @@ def create_app() -> Flask:
         SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_SECURE=os.environ.get("SWIFTPROPDF_COOKIE_SECURE", "0") == "1",
         PERMANENT_SESSION_LIFETIME=60 * 60 * 8,
+        BROWSER_HIT_IGNORED_IPS=configured_browser_hit_ignored_ips(),
     )
     init_db(app.config["DATABASE"])
     ensure_default_settings(app.config["DATABASE"])
@@ -168,6 +199,8 @@ def create_app() -> Flask:
         if request.endpoint in {"static"}:
             return False
         if request.path.startswith("/jobs/") or request.path.startswith("/__"):
+            return False
+        if is_browser_hit_ignored_ip(g.request_ip, app.config["BROWSER_HIT_IGNORED_IPS"]):
             return False
         return True
 
