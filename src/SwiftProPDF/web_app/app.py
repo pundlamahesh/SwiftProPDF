@@ -28,6 +28,7 @@ from SwiftProPDF.auth import (
     list_audit_events,
     list_users,
     log_audit_event,
+    record_browser_hit,
     set_user_security_questions,
     set_user_role,
     unlock_user,
@@ -144,7 +145,31 @@ def create_app() -> Flask:
                 httponly=True,
                 samesite="Lax",
             )
+        if should_track_browser_hit(response):
+            user_id = session.get("user_id")
+            try:
+                record_browser_hit(
+                    app.config["DATABASE"],
+                    request.path,
+                    user_id=int(user_id) if user_id is not None else None,
+                    anonymous_id=g.anonymous_id,
+                    ip_address=g.request_ip,
+                    user_agent=request.headers.get("User-Agent", ""),
+                )
+            except Exception:
+                app.logger.exception("Failed to record browser hit")
         return response
+
+    def should_track_browser_hit(response) -> bool:
+        if request.method != "GET":
+            return False
+        if response.status_code != 200 or response.mimetype != "text/html":
+            return False
+        if request.endpoint in {"static"}:
+            return False
+        if request.path.startswith("/jobs/") or request.path.startswith("/__"):
+            return False
+        return True
 
     def wants_json() -> bool:
         return request.headers.get("X-Requested-With") == "fetch"
@@ -391,9 +416,13 @@ def create_app() -> Flask:
         return render_template("public/home.html", tools=tools)
 
     @app.get("/about")
-    def about():
+    def about_redirect():
+        return redirect(url_for("aboutUs"))
+
+    @app.get("/aboutUs", endpoint="aboutUs")
+    def about_us():
         return render_template(
-            "public/about.html",
+            "public/aboutUs.html",
             tools=tools,
         )
 
@@ -405,9 +434,13 @@ def create_app() -> Flask:
         )
 
     @app.get("/contact")
-    def contact():
+    def contact_redirect():
+        return redirect(url_for("ContactUs"))
+
+    @app.get("/ContactUs", endpoint="ContactUs")
+    def contact_us():
         return render_template(
-            "public/contact.html",
+            "public/ContactUs.html",
             tools=tools,
         )
 

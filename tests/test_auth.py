@@ -2,7 +2,9 @@ from pathlib import Path
 
 from SwiftProPDF.auth import (
     AuthError,
+    admin_stats,
     create_user,
+    create_user_with_role,
     create_user_session,
     delete_user_session,
     ensure_default_settings,
@@ -10,6 +12,7 @@ from SwiftProPDF.auth import (
     get_total_usage,
     init_db,
     is_user_session_active,
+    record_browser_hit,
     record_tool_usage,
 )
 
@@ -38,11 +41,26 @@ def test_record_tool_usage_tracks_weekly_counts(tmp_path: Path) -> None:
     assert get_total_usage(db_path, user_id=user_id) == 2
 
 
+def test_browser_hits_count_unregistered_visitors(tmp_path: Path) -> None:
+    db_path = tmp_path / "test.sqlite3"
+    init_db(db_path)
+
+    user_id = create_user_with_role(db_path, "Test", "User", "user@example.com", "Passw0rd!234", "FREE")
+
+    record_browser_hit(db_path, "/", anonymous_id="guest-one", ip_address="127.0.0.1")
+    record_browser_hit(db_path, "/", anonymous_id="guest-one", ip_address="127.0.0.1")
+    record_browser_hit(db_path, "/account", user_id=user_id, ip_address="127.0.0.2")
+
+    stats = admin_stats(db_path)
+    assert stats["browser_hits"] == 3
+    assert stats["unregistered_browser_hits"] == 2
+
+
 def test_user_session_limit_allows_only_two_active_sessions(tmp_path: Path) -> None:
     db_path = tmp_path / "test.sqlite3"
     init_db(db_path)
 
-    user_id = create_user(db_path, "Test", "User", "user@example.com", "Passw0rd!234")
+    user_id = create_user_with_role(db_path, "Test", "User", "user@example.com", "Passw0rd!234", "FREE")
     create_user_session(db_path, user_id, "session-one", "Browser A", "127.0.0.1")
     create_user_session(db_path, user_id, "session-two", "Browser B", "127.0.0.2")
 
@@ -57,11 +75,26 @@ def test_user_session_limit_allows_only_two_active_sessions(tmp_path: Path) -> N
     assert is_user_session_active(db_path, user_id, "session-two")
 
 
+def test_admin_user_session_limit_is_unlimited(tmp_path: Path) -> None:
+    db_path = tmp_path / "test.sqlite3"
+    init_db(db_path)
+
+    user_id = create_user_with_role(db_path, "Admin", "User", "admin@example.com", "Passw0rd!234", "ADMIN")
+
+    create_user_session(db_path, user_id, "session-one")
+    create_user_session(db_path, user_id, "session-two")
+    create_user_session(db_path, user_id, "session-three")
+
+    assert is_user_session_active(db_path, user_id, "session-one")
+    assert is_user_session_active(db_path, user_id, "session-two")
+    assert is_user_session_active(db_path, user_id, "session-three")
+
+
 def test_deleting_user_session_frees_login_slot(tmp_path: Path) -> None:
     db_path = tmp_path / "test.sqlite3"
     init_db(db_path)
 
-    user_id = create_user(db_path, "Test", "User", "user@example.com", "Passw0rd!234")
+    user_id = create_user_with_role(db_path, "Test", "User", "user@example.com", "Passw0rd!234", "FREE")
     create_user_session(db_path, user_id, "session-one")
     create_user_session(db_path, user_id, "session-two")
 

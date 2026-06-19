@@ -94,6 +94,22 @@
                         </div>
                     </article>
                     <article class="metric-card">
+                        <div class="metric-card__icon">↗</div>
+                        <div>
+                            <p class="metric-card__label">Browser hits</p>
+                            <strong class="metric-card__value">{{ stats.browser_hits }}</strong>
+                            <p class="metric-card__meta">Successful page views from all visitors.</p>
+                        </div>
+                    </article>
+                    <article class="metric-card">
+                        <div class="metric-card__icon">◌</div>
+                        <div>
+                            <p class="metric-card__label">Unregistered hits</p>
+                            <strong class="metric-card__value">{{ stats.unregistered_browser_hits }}</strong>
+                            <p class="metric-card__meta">Page views from visitors without accounts.</p>
+                        </div>
+                    </article>
+                    <article class="metric-card">
                         <div class="metric-card__icon">🛡️</div>
                         <div>
                             <p class="metric-card__label">Audit events</p>

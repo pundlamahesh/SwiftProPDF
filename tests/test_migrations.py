@@ -28,6 +28,7 @@ def test_init_db_applies_alembic_schema(tmp_path: Path) -> None:
         "users",
         "audit_events",
         "usage_tracking",
+        "browser_hits",
         "user_security_questions",
         "user_sessions",
         "settings",
@@ -38,6 +39,13 @@ def test_init_db_applies_alembic_schema(tmp_path: Path) -> None:
         "weekly_usage_count",
         "lifetime_usage_count",
     }.issubset(column_names(db_path, "users"))
+    assert {
+        "user_id",
+        "anonymous_id",
+        "ip_address",
+        "path",
+        "hit_count",
+    }.issubset(column_names(db_path, "browser_hits"))
 
 
 def test_init_db_is_idempotent(tmp_path: Path) -> None:
@@ -49,4 +57,4 @@ def test_init_db_is_idempotent(tmp_path: Path) -> None:
     with sqlite3.connect(db_path) as connection:
         revision = connection.execute("SELECT version_num FROM alembic_version").fetchone()[0]
 
-    assert revision == "20260614_0001"
+    assert revision == "20260619_0002"

@@ -393,12 +393,15 @@ def create_user_session(
     expires_at = now + timedelta(hours=USER_SESSION_HOURS)
     with connect(database_path) as connection:
         prune_expired_user_sessions(connection, now)
-        active_count = connection.execute(
-            "SELECT COUNT(*) FROM user_sessions WHERE user_id = ? AND expires_at > ?",
-            (user_id, now.isoformat()),
-        ).fetchone()[0]
-        if int(active_count) >= MAX_ACTIVE_USER_SESSIONS:
-            raise AuthError("This account is already logged in on 2 devices. Please log out from another device and try again.")
+        user_row = connection.execute("SELECT role FROM users WHERE id = ?", (user_id,)).fetchone()
+        is_admin = user_row is not None and str(user_row[0] or "").upper() == "ADMIN"
+        if not is_admin:
+            active_count = connection.execute(
+                "SELECT COUNT(*) FROM user_sessions WHERE user_id = ? AND expires_at > ?",
+                (user_id, now.isoformat()),
+            ).fetchone()[0]
+            if int(active_count) >= MAX_ACTIVE_USER_SESSIONS:
+                raise AuthError("This account is already logged in on 2 devices. Please log out from another device and try again.")
 
         connection.execute(
             """
@@ -671,6 +674,69 @@ def list_audit_events(database_path: Path, limit: int = 50) -> list[dict[str, st
     return [dict(row) for row in rows]
 
 
+def record_browser_hit(
+    database_path: Path,
+    path: str,
+    user_id: int | None = None,
+    anonymous_id: str | None = None,
+    ip_address: str = "",
+    user_agent: str = "",
+    count: int = 1,
+) -> None:
+    if user_id is None and not anonymous_id:
+        raise ValueError("anonymous_id is required for guest browser hit tracking")
+
+    now = utc_now()
+    hit_date = now.date().isoformat()
+    hit_week = usage_week_key(now)
+    normalized_path = path[:255] or "/"
+
+    with connect(database_path) as connection:
+        if user_id is not None:
+            row = connection.execute(
+                "SELECT id FROM browser_hits WHERE user_id = ? AND path = ? AND hit_date = ?",
+                (user_id, normalized_path, hit_date),
+            ).fetchone()
+            if row:
+                connection.execute(
+                    "UPDATE browser_hits SET hit_count = hit_count + ?, last_hit_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (count, now.isoformat(), row[0]),
+                )
+            else:
+                connection.execute(
+                    """
+                    INSERT INTO browser_hits (
+                        user_id, anonymous_id, ip_address, path, user_agent,
+                        hit_date, hit_week, hit_count, last_hit_at
+                    )
+                    VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (user_id, ip_address[:80], normalized_path, user_agent[:255], hit_date, hit_week, count, now.isoformat()),
+                )
+            return
+
+        row = connection.execute(
+            "SELECT id FROM browser_hits WHERE anonymous_id = ? AND ip_address = ? AND path = ? AND hit_date = ?",
+            (anonymous_id, ip_address[:80], normalized_path, hit_date),
+        ).fetchone()
+        if row:
+            connection.execute(
+                "UPDATE browser_hits SET hit_count = hit_count + ?, last_hit_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (count, now.isoformat(), row[0]),
+            )
+        else:
+            connection.execute(
+                """
+                INSERT INTO browser_hits (
+                    user_id, anonymous_id, ip_address, path, user_agent,
+                    hit_date, hit_week, hit_count, last_hit_at
+                )
+                VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (anonymous_id, ip_address[:80], normalized_path, user_agent[:255], hit_date, hit_week, count, now.isoformat()),
+            )
+
+
 def admin_stats(database_path: Path) -> dict[str, int]:
     with connect(database_path) as connection:
         total_users = connection.execute("SELECT COUNT(*) FROM users").fetchone()[0]
@@ -680,12 +746,18 @@ def admin_stats(database_path: Path) -> dict[str, int]:
             (utc_now().isoformat(),),
         ).fetchone()[0]
         audit_events = connection.execute("SELECT COUNT(*) FROM audit_events").fetchone()[0]
+        browser_hits = connection.execute("SELECT SUM(hit_count) FROM browser_hits").fetchone()[0]
+        unregistered_browser_hits = connection.execute(
+            "SELECT SUM(hit_count) FROM browser_hits WHERE user_id IS NULL",
+        ).fetchone()[0]
 
     return {
         "total_users": int(total_users),
         "admins": int(admins),
         "locked_users": int(locked_users),
         "audit_events": int(audit_events),
+        "browser_hits": int(browser_hits or 0),
+        "unregistered_browser_hits": int(unregistered_browser_hits or 0),
     }
 
 
