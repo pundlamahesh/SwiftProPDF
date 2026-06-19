@@ -13,7 +13,7 @@ LOCKOUT_MINUTES = 15
 MAX_FAILED_RESET_ATTEMPTS = 5
 RESET_LOCKOUT_MINUTES = 30
 MAX_ACTIVE_USER_SESSIONS = 2
-USER_SESSION_HOURS = 8
+USER_SESSION_IDLE_MINUTES = 30
 
 
 class AuthError(Exception):
@@ -390,7 +390,7 @@ def create_user_session(
     ip_address: str = "",
 ) -> None:
     now = utc_now()
-    expires_at = now + timedelta(hours=USER_SESSION_HOURS)
+    expires_at = now + timedelta(minutes=USER_SESSION_IDLE_MINUTES)
     with connect(database_path) as connection:
         prune_expired_user_sessions(connection, now)
         user_row = connection.execute("SELECT role FROM users WHERE id = ?", (user_id,)).fetchone()
@@ -442,7 +442,7 @@ def is_user_session_active(database_path: Path, user_id: int, session_token: str
             """,
             (
                 now.isoformat(),
-                (now + timedelta(hours=USER_SESSION_HOURS)).isoformat(),
+                (now + timedelta(minutes=USER_SESSION_IDLE_MINUTES)).isoformat(),
                 user_id,
                 session_token,
             ),

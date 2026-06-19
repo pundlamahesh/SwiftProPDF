@@ -1,7 +1,10 @@
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import SwiftProPDF.auth as auth_module
 from SwiftProPDF.auth import (
     AuthError,
+    USER_SESSION_IDLE_MINUTES,
     admin_stats,
     create_user,
     create_user_with_role,
@@ -103,3 +106,36 @@ def test_deleting_user_session_frees_login_slot(tmp_path: Path) -> None:
 
     assert not is_user_session_active(db_path, user_id, "session-one")
     assert is_user_session_active(db_path, user_id, "session-three")
+
+
+def test_user_session_expires_after_idle_limit(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "test.sqlite3"
+    init_db(db_path)
+    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    monkeypatch.setattr(auth_module, "utc_now", lambda: start)
+
+    user_id = create_user_with_role(db_path, "Test", "User", "user@example.com", "Passw0rd!234", "FREE")
+    create_user_session(db_path, user_id, "session-one")
+
+    expired_at = start + timedelta(minutes=USER_SESSION_IDLE_MINUTES, seconds=1)
+    monkeypatch.setattr(auth_module, "utc_now", lambda: expired_at)
+
+    assert not is_user_session_active(db_path, user_id, "session-one")
+
+
+def test_active_user_session_refreshes_idle_limit(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "test.sqlite3"
+    init_db(db_path)
+    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    monkeypatch.setattr(auth_module, "utc_now", lambda: start)
+
+    user_id = create_user_with_role(db_path, "Test", "User", "user@example.com", "Passw0rd!234", "FREE")
+    create_user_session(db_path, user_id, "session-one")
+
+    first_request = start + timedelta(minutes=USER_SESSION_IDLE_MINUTES - 1)
+    monkeypatch.setattr(auth_module, "utc_now", lambda: first_request)
+    assert is_user_session_active(db_path, user_id, "session-one")
+
+    refreshed_request = first_request + timedelta(minutes=USER_SESSION_IDLE_MINUTES - 1)
+    monkeypatch.setattr(auth_module, "utc_now", lambda: refreshed_request)
+    assert is_user_session_active(db_path, user_id, "session-one")

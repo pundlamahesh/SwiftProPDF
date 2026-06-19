@@ -46,6 +46,7 @@ from SwiftProPDF.auth import (
     get_total_usage,
     get_weekly_total_usage,
     record_tool_usage,
+    USER_SESSION_IDLE_MINUTES,
 )
 from SwiftProPDF.core import (
     PdfSplitError, PdfUnlockError, PdfLockError, split_pdf, unlock_pdf, lock_pdf,
@@ -132,7 +133,7 @@ def create_app() -> Flask:
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_SECURE=os.environ.get("SWIFTPROPDF_COOKIE_SECURE", "0") == "1",
-        PERMANENT_SESSION_LIFETIME=60 * 60 * 8,
+        PERMANENT_SESSION_LIFETIME=60 * USER_SESSION_IDLE_MINUTES,
         BROWSER_HIT_IGNORED_IPS=configured_browser_hit_ignored_ips(),
     )
     init_db(app.config["DATABASE"])
