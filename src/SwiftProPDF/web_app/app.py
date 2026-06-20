@@ -9,7 +9,7 @@ from pathlib import Path
 from uuid import uuid4
 from urllib.parse import urlparse
 
-from flask import Flask, abort, after_this_request, g, jsonify, redirect, render_template, request, send_file, session, url_for
+from flask import Flask, abort, after_this_request, g, jsonify, redirect, render_template, request, send_file, send_from_directory, session, url_for
 from werkzeug.exceptions import HTTPException, RequestEntityTooLarge
 from werkzeug.utils import secure_filename
 
@@ -444,6 +444,14 @@ def create_app() -> Flask:
             quota_message=get_quota_message(),
             error=error,
         )
+
+    @app.get("/robots.txt")
+    def robots_txt():
+        return send_from_directory(app.static_folder, "robots.txt", mimetype="text/plain")
+
+    @app.get("/sitemap.xml")
+    def sitemap_xml():
+        return send_from_directory(app.static_folder, "sitemap.xml", mimetype="application/xml")
 
     @app.get("/")
     def index():
