@@ -365,7 +365,7 @@ function setupDownloadForm(form) {
                 await waitForBackgroundJob(payload.status_url, statusBox);
                 form.reset();
                 clearFilePreviews(form);
-                setStatus(statusBox, 'Your file is ready to download.', 'status');
+                setStatus(statusBox, 'Your file is ready and downloaded.', 'status');
                 return;
             }
 
@@ -374,7 +374,7 @@ function setupDownloadForm(form) {
             downloadBlob(blob, filename);
             form.reset();
             clearFilePreviews(form);
-            setStatus(statusBox, 'Your file is ready to download.', 'status');
+            setStatus(statusBox, 'Your file is ready and downloaded.', 'status');
         } catch (error) {
             setStatus(statusBox, error.message || 'Something went wrong while processing the file.', 'error');
         } finally {
